@@ -10,6 +10,8 @@ public struct Ticket: Identifiable, Codable, Equatable {
     public var localEstimate: TimeInterval?
     public let priority: Int
     public let updatedAt: Date
+    public let parentId: String?
+    public var children: [Ticket]
 
     public init(
         id: String,
@@ -20,7 +22,9 @@ public struct Ticket: Identifiable, Codable, Equatable {
         linearEstimate: Int?,
         localEstimate: TimeInterval?,
         priority: Int,
-        updatedAt: Date
+        updatedAt: Date,
+        parentId: String? = nil,
+        children: [Ticket] = []
     ) {
         self.id = id
         self.identifier = identifier
@@ -31,6 +35,16 @@ public struct Ticket: Identifiable, Codable, Equatable {
         self.localEstimate = localEstimate
         self.priority = priority
         self.updatedAt = updatedAt
+        self.parentId = parentId
+        self.children = children
+    }
+
+    public var hasChildren: Bool {
+        !children.isEmpty
+    }
+
+    public var allTickets: [Ticket] {
+        [self] + children.flatMap { $0.allTickets }
     }
 
     public var displayEstimate: String {
