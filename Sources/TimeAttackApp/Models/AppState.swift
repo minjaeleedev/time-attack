@@ -25,4 +25,12 @@ final class AppState: ObservableObject {
         if case .authenticated(let token) = authState { return token }
         return nil
     }
+    
+    func logout() {
+        try? KeychainManager.shared.deleteAccessToken()
+        authState = .unauthenticated
+        tickets = []
+        sessions = []
+        activeSession = nil
+    }
 }

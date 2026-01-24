@@ -1,32 +1,23 @@
 import SwiftUI
 
+// MARK: - IssueListView
+// 이슈 목록을 표시하는 메인 화면
+// Linear에서 가져온 티켓들을 리스트로 보여준다
 struct IssueListView: View {
+    // @EnvironmentObject: 상위 View에서 주입된 공유 상태 객체
+    // 앱 전체에서 공유되는 데이터 (티켓 목록, 로그인 상태 등)
     @EnvironmentObject var appState: AppState
-    @State private var selectedTicketId: String?
-    
+
     var body: some View {
         VStack(spacing: 0) {
+            // 활성화된 타이머가 있으면 상단에 헤더 표시
             if let activeSession = appState.activeSession,
                let activeTicket = appState.tickets.first(where: { $0.id == activeSession.ticketId }) {
                 ActiveTimerHeader(ticket: activeTicket, session: activeSession)
             }
-            
-            if appState.isLoading && appState.tickets.isEmpty {
-                ProgressView("Loading issues...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if appState.tickets.isEmpty {
-                ContentUnavailableView(
-                    "No assigned issues",
-                    systemImage: "tray",
-                    description: Text("You have no issues assigned to you in Linear.")
-                )
-            } else {
-                List(appState.tickets, selection: $selectedTicketId) { ticket in
-                    IssueRowView(ticket: ticket)
-                        .tag(ticket.id)
-                }
-                .listStyle(.inset)
-            }
+
+            // 콘텐츠 영역: 로딩 / 빈 상태 / 목록 중 하나를 표시
+            content
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -36,206 +27,69 @@ struct IssueListView: View {
                 .disabled(appState.isLoading)
             }
         }
+        // .task: View가 나타날 때 비동기 작업 실행
         .task {
-            await loadIssuesIfNeeded()
+            if appState.tickets.isEmpty {
+                refreshIssues()
+            }
         }
     }
-    
-    private func loadIssuesIfNeeded() async {
-        guard appState.tickets.isEmpty else { return }
-        refreshIssues()
+
+    // MARK: - Content View Builder
+    // @ViewBuilder: 여러 View 중 하나를 조건부로 반환할 수 있게 해주는 속성
+    @ViewBuilder
+    private var content: some View {
+        if appState.isLoading && appState.tickets.isEmpty {
+            // 로딩 중 + 데이터 없음 → 로딩 인디케이터
+            ProgressView("Loading issues...")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if appState.tickets.isEmpty {
+            // 로딩 완료 + 데이터 없음 → 빈 상태 표시
+            ContentUnavailableView(
+                "No assigned issues",
+                systemImage: "tray",
+                description: Text("You have no issues assigned to you in Linear.")
+            )
+        } else {
+            // 데이터 있음 → 이슈 목록 표시
+            ScrollView {
+                // LazyVStack: 화면에 보이는 항목만 렌더링 (성능 최적화)
+                LazyVStack(spacing: 0) {
+                    ForEach(appState.tickets) { ticket in
+                        IssueRowView(ticket: ticket)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                        Divider()
+                    }
+                }
+            }
+        }
     }
-    
+
+    // MARK: - Actions
+    // @MainActor: 이 함수가 메인 스레드에서 실행되도록 보장
+    // UI 업데이트는 항상 메인 스레드에서 해야 함
     @MainActor
     private func refreshIssues() {
         guard let token = appState.accessToken else { return }
         appState.isLoading = true
-        
+
+        // Task: 비동기 작업을 시작하는 블록
         Task {
             do {
+                // try await: 비동기 함수 호출, 실패하면 catch로 이동
                 let tickets = try await LinearGraphQLClient.shared.fetchAssignedIssues(accessToken: token)
                 appState.tickets = tickets
                 LocalStorage.shared.saveTickets(tickets)
+            } catch LinearAPIError.unauthorized {
+                // 인증 실패 → 로그아웃 처리
+                try? KeychainManager.shared.deleteAccessToken()
+                appState.authState = .unauthenticated
             } catch {
+                // 기타 에러 → 에러 메시지 표시
                 appState.errorMessage = error.localizedDescription
             }
             appState.isLoading = false
         }
-    }
-}
-
-struct IssueRowView: View {
-    let ticket: Ticket
-    @EnvironmentObject var appState: AppState
-    @State private var estimateInput = ""
-    @State private var isEditingEstimate = false
-    @FocusState private var isEstimateFocused: Bool
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(ticket.identifier)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(ticket.state)
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.2))
-                        .cornerRadius(4)
-                }
-                Text(ticket.title)
-                    .lineLimit(2)
-            }
-            
-            Spacer()
-            
-            if isEditingEstimate {
-                HStack {
-                    TextField("0m", text: $estimateInput)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 60)
-                        .focused($isEstimateFocused)
-                        .onSubmit(saveEstimate)
-                    Text("min")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                Button(action: startEditingEstimate) {
-                    Text(ticket.displayEstimate)
-                        .font(.caption)
-                        .foregroundColor(ticket.localEstimate == nil ? .secondary : .primary)
-                }
-                .buttonStyle(.plain)
-            }
-            
-            Button(action: startTimer) {
-                Image(systemName: isActiveTicket ? "stop.fill" : "play.fill")
-            }
-            .buttonStyle(.borderless)
-            .disabled(ticket.localEstimate == nil)
-        }
-        .padding(.vertical, 4)
-    }
-    
-    private var isActiveTicket: Bool {
-        appState.activeSession?.ticketId == ticket.id
-    }
-    
-    private func startEditingEstimate() {
-        if let estimate = ticket.localEstimate {
-            estimateInput = "\(Int(estimate / 60))"
-        } else {
-            estimateInput = ""
-        }
-        isEditingEstimate = true
-        isEstimateFocused = true
-    }
-    
-    private func saveEstimate() {
-        isEditingEstimate = false
-        guard let minutes = Int(estimateInput), minutes > 0 else { return }
-        let seconds = TimeInterval(minutes * 60)
-        
-        if let index = appState.tickets.firstIndex(where: { $0.id == ticket.id }) {
-            appState.tickets[index].localEstimate = seconds
-            LocalStorage.shared.saveEstimate(ticketId: ticket.id, estimate: seconds)
-            LocalStorage.shared.saveTickets(appState.tickets)
-        }
-    }
-    
-    private func startTimer() {
-        if isActiveTicket {
-            TimerEngine.shared.stopSession()
-        } else {
-            TimerEngine.shared.switchTo(ticketId: ticket.id)
-        }
-    }
-}
-
-struct ActiveTimerHeader: View {
-    let ticket: Ticket
-    let session: Session
-    @State private var elapsed: TimeInterval = 0
-    
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(ticket.identifier)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(ticket.title)
-                    .lineLimit(1)
-            }
-            
-            Spacer()
-            
-            VStack(alignment: .trailing) {
-                Text(formatTime(remaining))
-                    .font(.system(.title2, design: .monospaced))
-                    .foregroundColor(remaining < 0 ? .red : .primary)
-                
-                if let estimate = ticket.localEstimate {
-                    ProgressView(value: min(elapsed / estimate, 1.0))
-                        .frame(width: 100)
-                        .tint(remaining < 0 ? .red : .accentColor)
-                }
-            }
-            
-            HStack(spacing: 8) {
-                Button(action: togglePause) {
-                    Image(systemName: session.isPaused ? "play.fill" : "pause.fill")
-                }
-                .buttonStyle(.borderless)
-                
-                Button(action: stop) {
-                    Image(systemName: "stop.fill")
-                }
-                .buttonStyle(.borderless)
-            }
-        }
-        .padding()
-        .background(Color.accentColor.opacity(0.1))
-        .onReceive(timer) { _ in
-            updateElapsed()
-        }
-        .onAppear {
-            updateElapsed()
-        }
-    }
-    
-    private var remaining: TimeInterval {
-        guard let estimate = ticket.localEstimate else { return 0 }
-        return estimate - elapsed
-    }
-    
-    private func updateElapsed() {
-        guard !session.isPaused else { return }
-        elapsed = Date().timeIntervalSince(session.startTime) - session.totalPausedTime
-    }
-    
-    private func formatTime(_ interval: TimeInterval) -> String {
-        let absInterval = abs(interval)
-        let hours = Int(absInterval) / 3600
-        let minutes = (Int(absInterval) % 3600) / 60
-        let seconds = Int(absInterval) % 60
-        
-        let sign = interval < 0 ? "-" : ""
-        if hours > 0 {
-            return String(format: "%@%d:%02d:%02d", sign, hours, minutes, seconds)
-        }
-        return String(format: "%@%02d:%02d", sign, minutes, seconds)
-    }
-    
-    private func togglePause() {
-        TimerEngine.shared.togglePause()
-    }
-    
-    private func stop() {
-        TimerEngine.shared.stopSession()
     }
 }
