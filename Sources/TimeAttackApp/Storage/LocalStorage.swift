@@ -1,0 +1,58 @@
+import Foundation
+
+final class LocalStorage {
+    static let shared = LocalStorage()
+    
+    private let ticketsKey = "cached_tickets"
+    private let sessionsKey = "sessions"
+    private let estimatesKey = "local_estimates"
+    
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+    
+    private init() {
+        encoder.dateEncodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .iso8601
+    }
+    
+    func saveTickets(_ tickets: [Ticket]) {
+        guard let data = try? encoder.encode(tickets) else { return }
+        UserDefaults.standard.set(data, forKey: ticketsKey)
+    }
+    
+    func loadTickets() -> [Ticket] {
+        guard let data = UserDefaults.standard.data(forKey: ticketsKey),
+              let tickets = try? decoder.decode([Ticket].self, from: data) else {
+            return []
+        }
+        return tickets
+    }
+    
+    func saveSessions(_ sessions: [Session]) {
+        guard let data = try? encoder.encode(sessions) else { return }
+        UserDefaults.standard.set(data, forKey: sessionsKey)
+    }
+    
+    func loadSessions() -> [Session] {
+        guard let data = UserDefaults.standard.data(forKey: sessionsKey),
+              let sessions = try? decoder.decode([Session].self, from: data) else {
+            return []
+        }
+        return sessions
+    }
+    
+    func saveEstimate(ticketId: String, estimate: TimeInterval) {
+        var estimates = loadEstimates()
+        estimates[ticketId] = estimate
+        guard let data = try? encoder.encode(estimates) else { return }
+        UserDefaults.standard.set(data, forKey: estimatesKey)
+    }
+    
+    func loadEstimates() -> [String: TimeInterval] {
+        guard let data = UserDefaults.standard.data(forKey: estimatesKey),
+              let estimates = try? decoder.decode([String: TimeInterval].self, from: data) else {
+            return [:]
+        }
+        return estimates
+    }
+}
