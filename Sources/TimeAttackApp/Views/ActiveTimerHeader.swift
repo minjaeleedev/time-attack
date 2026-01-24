@@ -1,4 +1,5 @@
 import SwiftUI
+import TimeAttackCore
 
 // MARK: - ActiveTimerHeader
 // 타이머가 실행 중일 때 화면 상단에 표시되는 헤더

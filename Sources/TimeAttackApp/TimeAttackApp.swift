@@ -1,4 +1,5 @@
 import SwiftUI
+import TimeAttackCore
 
 @main
 struct TimeAttackApp: App {

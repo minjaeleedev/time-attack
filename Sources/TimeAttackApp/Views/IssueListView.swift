@@ -1,4 +1,5 @@
 import SwiftUI
+import TimeAttackCore
 
 // MARK: - IssueListView
 // 이슈 목록을 표시하는 메인 화면

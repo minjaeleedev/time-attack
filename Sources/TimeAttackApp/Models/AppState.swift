@@ -1,11 +1,5 @@
 import Foundation
-
-enum AuthState: Equatable {
-    case unauthenticated
-    case authenticating
-    case authenticated(accessToken: String)
-    case error(String)
-}
+import TimeAttackCore
 
 @MainActor
 final class AppState: ObservableObject {
@@ -15,17 +9,15 @@ final class AppState: ObservableObject {
     @Published var activeSession: Session?
     @Published var isLoading = false
     @Published var errorMessage: String?
-    
+
     var isAuthenticated: Bool {
-        if case .authenticated = authState { return true }
-        return false
+        authState.isAuthenticated
     }
-    
+
     var accessToken: String? {
-        if case .authenticated(let token) = authState { return token }
-        return nil
+        authState.accessToken
     }
-    
+
     func logout() {
         try? KeychainManager.shared.deleteAccessToken()
         authState = .unauthenticated

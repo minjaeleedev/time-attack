@@ -1,4 +1,5 @@
 import SwiftUI
+import TimeAttackCore
 
 // MARK: - IssueRowView
 // 개별 이슈(티켓)를 한 줄로 표시하는 컴포넌트

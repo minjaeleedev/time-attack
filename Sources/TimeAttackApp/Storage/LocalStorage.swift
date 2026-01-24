@@ -1,4 +1,5 @@
 import Foundation
+import TimeAttackCore
 
 final class LocalStorage {
     static let shared = LocalStorage()
