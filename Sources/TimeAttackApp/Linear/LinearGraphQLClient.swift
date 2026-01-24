@@ -24,6 +24,43 @@ final class LinearGraphQLClient {
                 estimate
                 priority
                 updatedAt
+                parent {
+                  id
+                }
+                children {
+                  nodes {
+                    id
+                    identifier
+                    title
+                    url
+                    state {
+                      name
+                    }
+                    estimate
+                    priority
+                    updatedAt
+                    parent {
+                      id
+                    }
+                    children {
+                      nodes {
+                        id
+                        identifier
+                        title
+                        url
+                        state {
+                          name
+                        }
+                        estimate
+                        priority
+                        updatedAt
+                        parent {
+                          id
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -39,19 +76,26 @@ final class LinearGraphQLClient {
         request.httpBody = try JSONEncoder().encode(body)
         
         let (data, response) = try await URLSession.shared.data(for: request)
-        
+
+        #if DEBUG
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("[Linear API Response]")
+            print(jsonString)
+        }
+        #endif
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw LinearAPIError.invalidResponse
         }
-        
+
         if httpResponse.statusCode == 401 {
             throw LinearAPIError.unauthorized
         }
-        
+
         guard httpResponse.statusCode == 200 else {
             throw LinearAPIError.httpError(httpResponse.statusCode)
         }
-        
+
         let graphQLResponse = try JSONDecoder().decode(GraphQLResponse.self, from: data)
         
         if let errors = graphQLResponse.errors, !errors.isEmpty {
@@ -61,14 +105,15 @@ final class LinearGraphQLClient {
         guard let nodes = graphQLResponse.data?.viewer.assignedIssues.nodes else {
             return []
         }
-        
+
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        
+
         let estimates = LocalStorage.shared.loadEstimates()
-        
-        return nodes.map { node in
-            Ticket(
+
+        func convertNode(_ node: IssueNode) -> Ticket {
+            let children = node.children?.nodes.map { convertNode($0) } ?? []
+            return Ticket(
                 id: node.id,
                 identifier: node.identifier,
                 title: node.title,
@@ -77,9 +122,13 @@ final class LinearGraphQLClient {
                 linearEstimate: node.estimate,
                 localEstimate: estimates[node.id],
                 priority: node.priority,
-                updatedAt: dateFormatter.date(from: node.updatedAt) ?? Date()
+                updatedAt: dateFormatter.date(from: node.updatedAt) ?? Date(),
+                parentId: node.parent?.id,
+                children: children
             )
         }
+
+        return nodes.map { convertNode($0) }
     }
 }
 
@@ -125,6 +174,16 @@ private struct IssueNode: Codable {
     let estimate: Int?
     let priority: Int
     let updatedAt: String
+    let parent: ParentRef?
+    let children: ChildrenConnection?
+}
+
+private struct ParentRef: Codable {
+    let id: String
+}
+
+private struct ChildrenConnection: Codable {
+    let nodes: [IssueNode]
 }
 
 private struct IssueState: Codable {
