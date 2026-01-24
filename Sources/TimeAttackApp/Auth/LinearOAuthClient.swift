@@ -4,8 +4,8 @@ import AuthenticationServices
 final class LinearOAuthClient: NSObject {
     static let shared = LinearOAuthClient()
     
-    private let clientId = "YOUR_LINEAR_CLIENT_ID"
-    private let clientSecret = "YOUR_LINEAR_CLIENT_SECRET"
+    private let clientId: String
+    private let clientSecret: String
     private let redirectUri = "timeattack://oauth/callback"
     private let authorizationEndpoint = "https://linear.app/oauth/authorize"
     private let tokenEndpoint = "https://api.linear.app/oauth/token"
@@ -14,7 +14,36 @@ final class LinearOAuthClient: NSObject {
     private var presentationAnchor: ASPresentationAnchor?
     
     private override init() {
+        let env = Self.loadEnvFile()
+        self.clientId = env["LINEAR_CLIENT_ID"] ?? ""
+        self.clientSecret = env["LINEAR_CLIENT_SECRET"] ?? ""
         super.init()
+    }
+    
+    private static func loadEnvFile() -> [String: String] {
+        var result: [String: String] = [:]
+        
+        let possiblePaths = [
+            Bundle.main.path(forResource: ".env", ofType: nil),
+            Bundle.main.bundlePath + "/../../../.env"
+        ].compactMap { $0 }
+        
+        for path in possiblePaths {
+            if let contents = try? String(contentsOfFile: path, encoding: .utf8) {
+                let lines = contents.components(separatedBy: .newlines)
+                for line in lines {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+                    let parts = trimmed.split(separator: "=", maxSplits: 1)
+                    if parts.count == 2 {
+                        result[String(parts[0])] = String(parts[1])
+                    }
+                }
+                break
+            }
+        }
+        
+        return result
     }
     
     func setPresentationAnchor(_ anchor: ASPresentationAnchor) {
