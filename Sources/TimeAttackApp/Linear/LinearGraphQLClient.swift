@@ -1,4 +1,5 @@
 import Foundation
+import TimeAttackCore
 
 final class LinearGraphQLClient {
     static let shared = LinearGraphQLClient()

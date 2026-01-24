@@ -3,7 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedTab = 0
-    
+
     var body: some View {
         Group {
             if appState.isAuthenticated {
@@ -13,7 +13,7 @@ struct ContentView: View {
                             Label("Issues", systemImage: "list.bullet")
                         }
                         .tag(0)
-                    
+
                     ReportView()
                         .tabItem {
                             Label("Reports", systemImage: "chart.bar")
@@ -21,6 +21,16 @@ struct ContentView: View {
                         .tag(1)
                 }
                 .frame(minWidth: 500, minHeight: 400)
+                .toolbar {
+                    ToolbarItem(placement: .automatic) {
+                        Button(action: {
+                            appState.logout()
+                        }) {
+                            Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                        .help("로그아웃")
+                    }
+                }
             } else {
                 OnboardingView()
             }

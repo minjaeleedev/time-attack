@@ -5,16 +5,27 @@ let package = Package(
     name: "TimeAttack",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "TimeAttackApp", targets: ["TimeAttackApp"])
+        .executable(name: "TimeAttackApp", targets: ["TimeAttackApp"]),
+        .library(name: "TimeAttackCore", targets: ["TimeAttackCore"])
     ],
     dependencies: [
         .package(url: "https://github.com/kishikawakatsumi/KeychainAccess.git", from: "4.2.2")
     ],
     targets: [
+        .target(
+            name: "TimeAttackCore",
+            dependencies: [],
+            path: "Sources/TimeAttackCore"
+        ),
         .executableTarget(
             name: "TimeAttackApp",
-            dependencies: ["KeychainAccess"],
+            dependencies: ["TimeAttackCore", "KeychainAccess"],
             path: "Sources/TimeAttackApp"
+        ),
+        .testTarget(
+            name: "TimeAttackTests",
+            dependencies: ["TimeAttackCore"],
+            path: "Tests/TimeAttackTests"
         )
     ]
 )

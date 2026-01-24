@@ -1,4 +1,5 @@
 import Foundation
+import TimeAttackCore
 
 @MainActor
 final class TimerEngine: ObservableObject {

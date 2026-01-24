@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:time-attack}",
+            "name": "Debug TimeAttackApp",
+            "target": "TimeAttackApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug TimeAttackApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:time-attack}",
+            "name": "Release TimeAttackApp",
+            "target": "TimeAttackApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release TimeAttackApp"
+        }
+    ]
+}

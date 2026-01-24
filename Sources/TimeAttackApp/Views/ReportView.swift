@@ -1,4 +1,5 @@
 import SwiftUI
+import TimeAttackCore
 
 struct ReportView: View {
     @EnvironmentObject var appState: AppState
