@@ -21,11 +21,6 @@ final class TimerEngine: ObservableObject {
 
     // MARK: - Work Session
 
-    func switchTo(ticketId: String) {
-        stopSession()
-        startWorkSession(ticketId: ticketId)
-    }
-
     func startWorkSession(ticketId: String) {
         guard let appState = appState else { return }
 
@@ -98,11 +93,6 @@ final class TimerEngine: ObservableObject {
     }
 
     // MARK: - Session Control
-
-    @available(*, deprecated, renamed: "startWorkSession")
-    func startSession(ticketId: String) {
-        startWorkSession(ticketId: ticketId)
-    }
 
     func stopSession() {
         guard let appState = appState,
