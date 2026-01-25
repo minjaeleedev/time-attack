@@ -24,6 +24,7 @@ final class LinearGraphQLClient {
                 estimate
                 priority
                 updatedAt
+                dueDate
                 parent {
                   id
                 }
@@ -39,6 +40,7 @@ final class LinearGraphQLClient {
                     estimate
                     priority
                     updatedAt
+                    dueDate
                     parent {
                       id
                     }
@@ -54,6 +56,7 @@ final class LinearGraphQLClient {
                         estimate
                         priority
                         updatedAt
+                        dueDate
                         parent {
                           id
                         }
@@ -109,10 +112,14 @@ final class LinearGraphQLClient {
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
+        let dueDateFormatter = DateFormatter()
+        dueDateFormatter.dateFormat = "yyyy-MM-dd"
+
         let estimates = LocalStorage.shared.loadEstimates()
 
         func convertNode(_ node: IssueNode) -> Ticket {
             let children = node.children?.nodes.map { convertNode($0) } ?? []
+            let dueDate: Date? = node.dueDate.flatMap { dueDateFormatter.date(from: $0) }
             return Ticket(
                 id: node.id,
                 identifier: node.identifier,
@@ -123,6 +130,7 @@ final class LinearGraphQLClient {
                 localEstimate: estimates[node.id],
                 priority: node.priority,
                 updatedAt: dateFormatter.date(from: node.updatedAt) ?? Date(),
+                dueDate: dueDate,
                 parentId: node.parent?.id,
                 children: children
             )
@@ -174,6 +182,7 @@ private struct IssueNode: Codable {
     let estimate: Int?
     let priority: Int
     let updatedAt: String
+    let dueDate: String?
     let parent: ParentRef?
     let children: ChildrenConnection?
 }

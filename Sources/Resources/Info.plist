@@ -22,5 +22,13 @@
     <true/>
     <key>LSUIElement</key>
     <false/>
+    <key>CFBundleAlternateNames</key>
+    <array>
+        <string>timeattack</string>
+        <string>time attack</string>
+        <string>linear timer</string>
+    </array>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
 </dict>
 </plist>

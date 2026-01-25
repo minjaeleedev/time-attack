@@ -10,6 +10,7 @@ struct ActiveTimerHeader: View {
 
     // @State: View 내부 상태 - 경과 시간을 추적
     @State private var elapsed: TimeInterval = 0
+    @State private var showingSessionSwitch = false
 
     // Timer.publish: 1초마다 이벤트를 발생시키는 타이머
     // autoconnect(): 자동으로 타이머 시작
@@ -30,6 +31,14 @@ struct ActiveTimerHeader: View {
         }
         .onAppear {
             updateElapsed()
+        }
+        .sheet(isPresented: $showingSessionSwitch) {
+            SessionSwitchModal(
+                isPresented: $showingSessionSwitch,
+                switchType: .choice,
+                currentRemainingTime: remaining,
+                suspendedTicketId: session.ticketId
+            )
         }
     }
 
@@ -63,9 +72,11 @@ struct ActiveTimerHeader: View {
 
     private var controlButtons: some View {
         HStack(spacing: 8) {
-            // 일시정지/재개 버튼
-            Button(action: { TimerEngine.shared.togglePause() }) {
-                Image(systemName: session.isPaused ? "play.fill" : "pause.fill")
+            // 일시정지 버튼 - 모달 표시
+            Button(action: {
+                showingSessionSwitch = true
+            }) {
+                Image(systemName: "pause.fill")
             }
             .buttonStyle(.borderless)
 
@@ -80,7 +91,11 @@ struct ActiveTimerHeader: View {
     // MARK: - Computed Properties
 
     // 남은 시간 = 예상 시간 - 경과 시간
+    // 재개된 세션의 경우 initialRemainingTime 사용
     private var remaining: TimeInterval {
+        if let initialRemaining = session.initialRemainingTime {
+            return initialRemaining - elapsed
+        }
         guard let estimate = ticket.localEstimate else { return 0 }
         return estimate - elapsed
     }

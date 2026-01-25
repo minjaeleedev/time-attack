@@ -16,19 +16,32 @@ public struct Session: Identifiable, Codable, Equatable {
     public let startTime: Date
     public var endTime: Date?
     public var pausedIntervals: [PausedInterval]
+    public var mode: SessionMode
+    public let initialRemainingTime: TimeInterval?
 
     public init(
         id: UUID = UUID(),
         ticketId: String,
         startTime: Date = Date(),
         endTime: Date? = nil,
-        pausedIntervals: [PausedInterval] = []
+        pausedIntervals: [PausedInterval] = [],
+        mode: SessionMode? = nil,
+        initialRemainingTime: TimeInterval? = nil
     ) {
         self.id = id
         self.ticketId = ticketId
         self.startTime = startTime
         self.endTime = endTime
         self.pausedIntervals = pausedIntervals
+        self.mode = mode ?? .work(ticketId: ticketId)
+        self.initialRemainingTime = initialRemainingTime
+    }
+
+    public static func restSession(duration: TimeInterval) -> Session {
+        Session(
+            ticketId: "rest",
+            mode: .rest(duration: duration)
+        )
     }
 
     public var totalPausedTime: TimeInterval {

@@ -204,4 +204,106 @@ final class SessionTests: XCTestCase {
         // Then
         XCTAssertFalse(result)
     }
+
+    // MARK: - SessionMode
+
+    func test_sessionMode_work_isWorkTrue() {
+        // Given
+        let mode = SessionMode.work(ticketId: "test-ticket")
+
+        // Then
+        XCTAssertTrue(mode.isWork)
+        XCTAssertFalse(mode.isRest)
+        XCTAssertEqual(mode.ticketId, "test-ticket")
+        XCTAssertNil(mode.restDuration)
+    }
+
+    func test_sessionMode_rest_isRestTrue() {
+        // Given
+        let mode = SessionMode.rest(duration: 300)
+
+        // Then
+        XCTAssertFalse(mode.isWork)
+        XCTAssertTrue(mode.isRest)
+        XCTAssertNil(mode.ticketId)
+        XCTAssertEqual(mode.restDuration, 300)
+    }
+
+    func test_session_defaultMode_isWork() {
+        // Given
+        let session = Session(ticketId: "test-ticket")
+
+        // Then
+        XCTAssertTrue(session.mode.isWork)
+        XCTAssertEqual(session.mode.ticketId, "test-ticket")
+    }
+
+    func test_session_restSession_hasCorrectMode() {
+        // Given
+        let session = Session.restSession(duration: 600)
+
+        // Then
+        XCTAssertTrue(session.mode.isRest)
+        XCTAssertEqual(session.mode.restDuration, 600)
+        XCTAssertEqual(session.ticketId, "rest")
+    }
+
+    func test_session_withExplicitWorkMode() {
+        // Given
+        let session = Session(
+            ticketId: "test-ticket",
+            mode: .work(ticketId: "test-ticket")
+        )
+
+        // Then
+        XCTAssertTrue(session.mode.isWork)
+        XCTAssertEqual(session.mode.ticketId, "test-ticket")
+    }
+
+    func test_session_withExplicitRestMode() {
+        // Given
+        let session = Session(
+            ticketId: "rest",
+            mode: .rest(duration: 900)
+        )
+
+        // Then
+        XCTAssertTrue(session.mode.isRest)
+        XCTAssertEqual(session.mode.restDuration, 900)
+    }
+
+    // MARK: - initialRemainingTime
+
+    func test_session_withoutInitialRemainingTime_returnsNil() {
+        // Given
+        let session = Session(ticketId: "test-ticket")
+
+        // Then
+        XCTAssertNil(session.initialRemainingTime)
+    }
+
+    func test_session_withInitialRemainingTime_returnsValue() {
+        // Given
+        let session = Session(
+            ticketId: "test-ticket",
+            initialRemainingTime: 810  // 13:30 remaining
+        )
+
+        // Then
+        XCTAssertEqual(session.initialRemainingTime, 810)
+    }
+
+    func test_session_resumedSession_preservesInitialRemainingTime() {
+        // Given: Session resumed with 13:30 (810 seconds) remaining
+        let session = Session(
+            ticketId: "test-ticket",
+            mode: .work(ticketId: "test-ticket"),
+            initialRemainingTime: 810
+        )
+
+        // Then
+        XCTAssertNotNil(session.initialRemainingTime)
+        XCTAssertEqual(session.initialRemainingTime!, 810, accuracy: 0.001)
+        XCTAssertTrue(session.mode.isWork)
+    }
 }

@@ -32,7 +32,7 @@ struct IssueRowView: View {
 
     // MARK: - Subviews
 
-    // 티켓 기본 정보 (식별자, 상태, 제목)
+    // 티켓 기본 정보 (식별자, 상태, 마감일, 제목)
     private var ticketInfo: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -40,6 +40,11 @@ struct IssueRowView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 StateBadge(state: ticket.state)
+                if case .none = ticket.dueDateStatus {
+                    // no due date badge
+                } else {
+                    DueDateBadge(status: ticket.dueDateStatus)
+                }
             }
             Text(ticket.title)
                 .lineLimit(2)
@@ -122,7 +127,12 @@ struct IssueRowView: View {
         if isActiveTicket {
             TimerEngine.shared.stopSession()
         } else {
-            TimerEngine.shared.switchTo(ticketId: ticket.id)
+            // Check if estimate is needed first
+            if ticket.localEstimate == nil {
+                appState.pendingEstimateTicketId = ticket.id
+            } else {
+                TimerEngine.shared.startWorkSession(ticketId: ticket.id)
+            }
         }
     }
 }
@@ -139,5 +149,30 @@ private struct StateBadge: View {
             .padding(.vertical, 2)
             .background(Color.secondary.opacity(0.2))
             .cornerRadius(4)
+    }
+}
+
+// MARK: - DueDateBadge
+// 마감일 상태를 뱃지 형태로 표시하는 컴포넌트
+private struct DueDateBadge: View {
+    let status: DueDateStatus
+
+    var body: some View {
+        Text(status.displayText)
+            .font(.caption)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(badgeColor.opacity(0.2))
+            .foregroundColor(badgeColor)
+            .cornerRadius(4)
+    }
+
+    private var badgeColor: Color {
+        switch status.color {
+        case "red": return .red
+        case "orange": return .orange
+        case "yellow": return .yellow
+        default: return .secondary
+        }
     }
 }
