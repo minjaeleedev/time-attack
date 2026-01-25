@@ -155,7 +155,7 @@ private struct StateBadge: View {
 // MARK: - DueDateBadge
 // 마감일 상태를 뱃지 형태로 표시하는 컴포넌트
 private struct DueDateBadge: View {
-    let status: DueDateStatus
+    let status: TicketDueDateStatus
 
     var body: some View {
         Text(status.displayText)

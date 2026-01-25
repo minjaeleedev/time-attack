@@ -1,26 +1,6 @@
 import Foundation
 import TimeAttackCore
 
-struct SuspendedSession: Codable, Equatable {
-    let ticketId: String
-    let remainingTime: TimeInterval
-    let suspendedAt: Date
-}
-
-struct TransitionRecord: Codable, Equatable, Identifiable {
-    let id: UUID
-    let date: Date
-    let duration: TimeInterval
-    let fromTicketId: String?
-
-    init(id: UUID = UUID(), date: Date = Date(), duration: TimeInterval, fromTicketId: String?) {
-        self.id = id
-        self.date = date
-        self.duration = duration
-        self.fromTicketId = fromTicketId
-    }
-}
-
 @MainActor
 final class AppState: ObservableObject {
     @Published var authState: AuthState = .unauthenticated
