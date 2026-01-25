@@ -27,3 +27,5 @@ Package.resolved
 *.perspectivev3
 !default.perspectivev3
 *.moved-aside
+
+*.xcodeproj/

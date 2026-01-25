@@ -1,0 +1,57 @@
+name: TimeAttack
+options:
+  bundleIdPrefix: com.miles
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+
+packages:
+  KeychainAccess:
+    url: https://github.com/kishikawakatsumi/KeychainAccess.git
+    from: 4.2.2
+
+targets:
+  TimeAttackCore:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Sources/TimeAttackCore
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.miles.TimeAttackCore
+      PRODUCT_NAME: TimeAttackCore
+      DEFINES_MODULE: YES
+      CODE_SIGN_IDENTITY: "-"
+      CODE_SIGNING_REQUIRED: NO
+      GENERATE_INFOPLIST_FILE: YES
+
+  TimeAttackApp:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/TimeAttackApp
+    resources:
+      - path: Sources/Resources/Info.plist
+        buildPhase: none
+    info:
+      path: Sources/Resources/Info.plist
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.miles.TimeAttackApp
+      PRODUCT_NAME: TimeAttack
+      INFOPLIST_FILE: Sources/Resources/Info.plist
+      GENERATE_INFOPLIST_FILE: NO
+      CODE_SIGN_STYLE: Automatic
+      CODE_SIGN_IDENTITY: "-"
+      CODE_SIGNING_REQUIRED: NO
+    dependencies:
+      - target: TimeAttackCore
+      - package: KeychainAccess
+
+  TimeAttackTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/TimeAttackTests
+    dependencies:
+      - target: TimeAttackCore
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.miles.TimeAttackTests
