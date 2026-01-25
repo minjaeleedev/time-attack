@@ -10,6 +10,7 @@ public struct Ticket: Identifiable, Codable, Equatable {
     public var localEstimate: TimeInterval?
     public let priority: Int
     public let updatedAt: Date
+    public let dueDate: Date?
     public let parentId: String?
     public var children: [Ticket]
 
@@ -23,6 +24,7 @@ public struct Ticket: Identifiable, Codable, Equatable {
         localEstimate: TimeInterval?,
         priority: Int,
         updatedAt: Date,
+        dueDate: Date? = nil,
         parentId: String? = nil,
         children: [Ticket] = []
     ) {
@@ -35,8 +37,31 @@ public struct Ticket: Identifiable, Codable, Equatable {
         self.localEstimate = localEstimate
         self.priority = priority
         self.updatedAt = updatedAt
+        self.dueDate = dueDate
         self.parentId = parentId
         self.children = children
+    }
+
+    public var dueDateStatus: TicketDueDateStatus {
+        guard let dueDate = dueDate else { return .none }
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let dueDateStart = calendar.startOfDay(for: dueDate)
+
+        let components = calendar.dateComponents([.day], from: today, to: dueDateStart)
+        guard let days = components.day else { return .none }
+
+        switch days {
+        case ..<0:
+            return .overdue(days: abs(days))
+        case 0:
+            return .today
+        case 1...3:
+            return .soon(days: days)
+        default:
+            return .normal(days: days)
+        }
     }
 
     public var hasChildren: Bool {

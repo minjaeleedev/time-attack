@@ -3,11 +3,13 @@ import TimeAttackCore
 
 final class LocalStorage {
     static let shared = LocalStorage()
-    
+
     private let ticketsKey = "cached_tickets"
     private let sessionsKey = "sessions"
     private let estimatesKey = "local_estimates"
-    
+    private let suspendedSessionsKey = "suspended_sessions"
+    private let transitionRecordsKey = "transition_records"
+
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     
@@ -55,5 +57,31 @@ final class LocalStorage {
             return [:]
         }
         return estimates
+    }
+
+    func saveSuspendedSessions(_ sessions: [String: SuspendedSession]) {
+        guard let data = try? encoder.encode(sessions) else { return }
+        UserDefaults.standard.set(data, forKey: suspendedSessionsKey)
+    }
+
+    func loadSuspendedSessions() -> [String: SuspendedSession] {
+        guard let data = UserDefaults.standard.data(forKey: suspendedSessionsKey),
+              let sessions = try? decoder.decode([String: SuspendedSession].self, from: data) else {
+            return [:]
+        }
+        return sessions
+    }
+
+    func saveTransitionRecords(_ records: [TransitionRecord]) {
+        guard let data = try? encoder.encode(records) else { return }
+        UserDefaults.standard.set(data, forKey: transitionRecordsKey)
+    }
+
+    func loadTransitionRecords() -> [TransitionRecord] {
+        guard let data = UserDefaults.standard.data(forKey: transitionRecordsKey),
+              let records = try? decoder.decode([TransitionRecord].self, from: data) else {
+            return []
+        }
+        return records
     }
 }

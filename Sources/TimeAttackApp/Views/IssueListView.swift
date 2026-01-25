@@ -11,16 +11,27 @@ struct IssueListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 활성화된 타이머가 있으면 상단에 헤더 표시
-            if let activeSession = appState.activeSession,
-               let activeTicket = appState.tickets.first(where: { $0.id == activeSession.ticketId }) {
-                ActiveTimerHeader(ticket: activeTicket, session: activeSession)
+            // 활성화된 세션 헤더 표시
+            if let activeSession = appState.activeSession {
+                if activeSession.mode.isRest {
+                    RestTimerHeader(session: activeSession)
+                } else if let activeTicket = appState.tickets.first(where: { $0.id == activeSession.ticketId }) {
+                    ActiveTimerHeader(ticket: activeTicket, session: activeSession)
+                }
             }
 
             // 콘텐츠 영역: 로딩 / 빈 상태 / 목록 중 하나를 표시
             content
         }
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    appState.showingSessionStart = true
+                } label: {
+                    Label("새 세션", systemImage: "plus.circle")
+                }
+                .disabled(appState.activeSession != nil)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button(action: refreshIssues) {
                     Image(systemName: "arrow.clockwise")
@@ -34,6 +45,22 @@ struct IssueListView: View {
                 refreshIssues()
             }
         }
+        .sheet(isPresented: $appState.showingSessionStart) {
+            SessionStartSheet()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: showingEstimateSheet) {
+            if let ticketId = appState.pendingEstimateTicketId {
+                EstimateInputSheet(ticketId: ticketId, isPresented: showingEstimateSheet)
+            }
+        }
+    }
+
+    private var showingEstimateSheet: Binding<Bool> {
+        Binding(
+            get: { appState.pendingEstimateTicketId != nil },
+            set: { if !$0 { appState.pendingEstimateTicketId = nil } }
+        )
     }
 
     // MARK: - Content View Builder

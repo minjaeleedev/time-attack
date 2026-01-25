@@ -9,6 +9,10 @@ final class AppState: ObservableObject {
     @Published var activeSession: Session?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var pendingEstimateTicketId: String?
+    @Published var showingSessionStart = false
+    @Published var suspendedSessions: [String: SuspendedSession] = [:]
+    @Published var transitionRecords: [TransitionRecord] = []
 
     var isAuthenticated: Bool {
         authState.isAuthenticated
