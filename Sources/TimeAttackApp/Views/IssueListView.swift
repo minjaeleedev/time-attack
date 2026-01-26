@@ -32,6 +32,13 @@ struct IssueListView: View {
                 }
                 .disabled(appState.activeSession != nil)
             }
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    appState.showCreateIssueSheet = true
+                } label: {
+                    Label("새 이슈", systemImage: "plus.square")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button(action: refreshIssues) {
                     Image(systemName: "arrow.clockwise")
@@ -44,6 +51,7 @@ struct IssueListView: View {
             if appState.tickets.isEmpty {
                 refreshIssues()
             }
+            await loadLinearMetadata()
         }
         .sheet(isPresented: $appState.showingSessionStart) {
             SessionStartSheet()
@@ -53,6 +61,45 @@ struct IssueListView: View {
             if let ticketId = appState.pendingEstimateTicketId {
                 EstimateInputSheet(ticketId: ticketId, isPresented: showingEstimateSheet)
             }
+        }
+        .sheet(isPresented: $appState.showCreateIssueSheet) {
+            CreateIssueSheet()
+                .environmentObject(appState)
+        }
+        .alert(
+            "작업 완료",
+            isPresented: showingCompletionAlert,
+            presenting: appState.pendingStateChangeConfirmation
+        ) { pending in
+            Button("완료로 변경") {
+                confirmStateChange(pending)
+            }
+            Button("취소", role: .cancel) {
+                appState.pendingStateChangeConfirmation = nil
+            }
+        } message: { pending in
+            Text("\(pending.ticketIdentifier) 이슈를 '\(pending.targetState.name)' 상태로 변경할까요?")
+        }
+    }
+
+    private var showingCompletionAlert: Binding<Bool> {
+        Binding(
+            get: { appState.pendingStateChangeConfirmation != nil },
+            set: { if !$0 { appState.pendingStateChangeConfirmation = nil } }
+        )
+    }
+
+    private func confirmStateChange(_ pending: PendingStateChange) {
+        Task {
+            _ = await appState.updateIssueState(ticketId: pending.ticketId, stateId: pending.targetState.id)
+            appState.pendingStateChangeConfirmation = nil
+        }
+    }
+
+    private func loadLinearMetadata() async {
+        await appState.loadTeams()
+        if let teamId = appState.selectedTeamId {
+            await appState.loadWorkflowStates(for: teamId)
         }
     }
 

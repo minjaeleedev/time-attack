@@ -86,4 +86,21 @@ public struct Ticket: Identifiable, Codable, Equatable {
         }
         return "No estimate"
     }
+
+    public func withState(_ newState: String, updatedAt: Date = Date()) -> Ticket {
+        Ticket(
+            id: id,
+            identifier: identifier,
+            title: title,
+            url: url,
+            state: newState,
+            linearEstimate: linearEstimate,
+            localEstimate: localEstimate,
+            priority: priority,
+            updatedAt: updatedAt,
+            dueDate: dueDate,
+            parentId: parentId,
+            children: children
+        )
+    }
 }

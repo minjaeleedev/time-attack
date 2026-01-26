@@ -39,7 +39,7 @@ struct IssueRowView: View {
                 Text(ticket.identifier)
                     .font(.caption)
                     .foregroundColor(.secondary)
-                StateBadge(state: ticket.state)
+                StateBadge(state: ticket.state, ticketId: ticket.id)
                 if case .none = ticket.dueDateStatus {
                     // no due date badge
                 } else {
@@ -139,16 +139,67 @@ struct IssueRowView: View {
 
 // MARK: - StateBadge
 // 티켓 상태를 뱃지 형태로 표시하는 작은 컴포넌트
+// 탭하면 상태 변경 메뉴가 표시됨
 private struct StateBadge: View {
     let state: String
+    let ticketId: String
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
-        Text(state)
-            .font(.caption)
+        Menu {
+            if appState.workflowStatesForCurrentTeam().isEmpty {
+                Text("상태 로딩 중...")
+            } else {
+                ForEach(appState.workflowStatesForCurrentTeam()) { workflowState in
+                    Button {
+                        changeState(to: workflowState)
+                    } label: {
+                        HStack {
+                            Circle()
+                                .fill(Color(hex: workflowState.color))
+                                .frame(width: 8, height: 8)
+                            Text(workflowState.name)
+                            if workflowState.name == state {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                    .disabled(workflowState.name == state)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(state)
+                    .font(.caption)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8))
+            }
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(Color.secondary.opacity(0.2))
             .cornerRadius(4)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(appState.isUpdatingIssueState)
+        .onAppear {
+            loadStatesIfNeeded()
+        }
+    }
+
+    private func loadStatesIfNeeded() {
+        guard let teamId = appState.selectedTeamId,
+              appState.workflowStates[teamId] == nil else { return }
+
+        Task {
+            await appState.loadWorkflowStates(for: teamId)
+        }
+    }
+
+    private func changeState(to workflowState: WorkflowState) {
+        Task {
+            _ = await appState.updateIssueState(ticketId: ticketId, stateId: workflowState.id)
+        }
     }
 }
 

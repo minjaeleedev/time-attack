@@ -5,6 +5,11 @@ options:
     macOS: "14.0"
   xcodeVersion: "16.0"
 
+settings:
+  base:
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_MODULE_VERIFIER: YES
+
 packages:
   KeychainAccess:
     url: https://github.com/kishikawakatsumi/KeychainAccess.git
