@@ -11,7 +11,6 @@ final class LinearOAuthClient: NSObject {
     private let tokenEndpoint = "https://api.linear.app/oauth/token"
 
     private var authSession: ASWebAuthenticationSession?
-    private var presentationAnchor: ASPresentationAnchor?
 
     private override init() {
         let env = Self.loadEnvFile()
@@ -27,7 +26,6 @@ final class LinearOAuthClient: NSObject {
             Bundle.main.path(forResource: ".env", ofType: nil),
             Bundle.main.bundlePath + "/../../../.env",
             Bundle.main.bundlePath + "/../../../../../../../../.env",
-            "/Users/miles/private-repo/time-attack/.env",
         ].compactMap { $0 }
 
         for path in possiblePaths {
@@ -46,10 +44,6 @@ final class LinearOAuthClient: NSObject {
         }
 
         return result
-    }
-
-    func setPresentationAnchor(_ anchor: ASPresentationAnchor) {
-        self.presentationAnchor = anchor
     }
 
     @MainActor
@@ -136,7 +130,7 @@ final class LinearOAuthClient: NSObject {
 
 extension LinearOAuthClient: ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        presentationAnchor ?? ASPresentationAnchor()
+        ASPresentationAnchor()
     }
 }
 

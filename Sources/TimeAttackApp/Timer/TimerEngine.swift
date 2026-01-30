@@ -21,11 +21,6 @@ final class TimerEngine: ObservableObject {
 
     // MARK: - Work Session
 
-    func switchTo(ticketId: String) {
-        stopSession()
-        startWorkSession(ticketId: ticketId)
-    }
-
     func startWorkSession(ticketId: String) {
         guard let appState = appState else { return }
 
@@ -33,6 +28,8 @@ final class TimerEngine: ObservableObject {
         appState.activeSession = session
         appState.sessions.append(session)
         saveSessions()
+
+        autoTransitionToInProgress(ticketId: ticketId)
     }
 
     // MARK: - Rest Session
@@ -98,11 +95,6 @@ final class TimerEngine: ObservableObject {
     }
 
     // MARK: - Session Control
-
-    @available(*, deprecated, renamed: "startWorkSession")
-    func startSession(ticketId: String) {
-        startWorkSession(ticketId: ticketId)
-    }
 
     func stopSession() {
         guard let appState = appState,
@@ -183,5 +175,41 @@ final class TimerEngine: ObservableObject {
 
     private func cancelPendingNotifications() {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-end"])
+    }
+
+    // MARK: - Auto State Transition
+
+    private func autoTransitionToInProgress(ticketId: String) {
+        guard let appState = appState else { return }
+
+        guard let ticket = appState.tickets.first(where: { $0.id == ticketId }) else { return }
+
+        // Check current state type using workflow states instead of hardcoded names
+        let currentStateType = appState.workflowStatesForCurrentTeam()
+            .first { $0.name == ticket.state }?.type
+
+        // If already in started or completed state, don't transition
+        guard currentStateType != "started" && currentStateType != "completed" else {
+            return
+        }
+
+        guard let inProgressState = appState.findInProgressState() else { return }
+
+        Task {
+            _ = await appState.updateIssueState(ticketId: ticketId, stateId: inProgressState.id)
+        }
+    }
+
+    func promptCompletionStateChange(ticketId: String) {
+        guard let appState = appState else { return }
+
+        guard let ticket = appState.tickets.first(where: { $0.id == ticketId }),
+              let completedState = appState.findCompletedState() else { return }
+
+        appState.pendingStateChangeConfirmation = PendingStateChange(
+            ticketId: ticketId,
+            ticketIdentifier: ticket.identifier,
+            targetState: completedState
+        )
     }
 }
