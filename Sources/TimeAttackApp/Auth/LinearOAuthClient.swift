@@ -1,31 +1,30 @@
-import AuthenticationServices
+import AppKit
 import Foundation
 
-final class LinearOAuthClient: NSObject {
+final class LinearOAuthClient {
     static let shared = LinearOAuthClient()
 
     private let clientId: String
     private let clientSecret: String
-    private let redirectUri = "timeattack://oauth/callback"
+    private let callbackPort: UInt16 = 8847
+    private var redirectUri: String { "http://localhost:\(callbackPort)/oauth/callback" }
     private let authorizationEndpoint = "https://linear.app/oauth/authorize"
     private let tokenEndpoint = "https://api.linear.app/oauth/token"
 
-    private var authSession: ASWebAuthenticationSession?
+    private var server: LocalOAuthServer?
 
-    private override init() {
+    private init() {
         let env = Self.loadEnvFile()
         self.clientId = env["LINEAR_CLIENT_ID"] ?? ""
         self.clientSecret = env["LINEAR_CLIENT_SECRET"] ?? ""
-        super.init()
     }
 
     private static func loadEnvFile() -> [String: String] {
         var result: [String: String] = [:]
 
         let possiblePaths = [
+            Bundle.main.path(forResource: "env", ofType: nil),
             Bundle.main.path(forResource: ".env", ofType: nil),
-            Bundle.main.bundlePath + "/../../../.env",
-            Bundle.main.bundlePath + "/../../../../../../../../.env",
         ].compactMap { $0 }
 
         for path in possiblePaths {
@@ -48,6 +47,12 @@ final class LinearOAuthClient: NSObject {
 
     @MainActor
     func authenticate() async throws -> String {
+        print("🔐 [OAuth] Starting authentication...")
+        print(
+            "🔐 [OAuth] clientId: \(clientId.isEmpty ? "EMPTY" : String(clientId.prefix(8)) + "...")"
+        )
+        print("🔐 [OAuth] redirectUri: \(redirectUri)")
+
         let state = UUID().uuidString
 
         var components = URLComponents(string: authorizationEndpoint)!
@@ -63,27 +68,29 @@ final class LinearOAuthClient: NSObject {
             throw OAuthError.invalidURL
         }
 
+        print("🔐 [OAuth] Auth URL: \(authUrl)")
+
         let callbackUrl = try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<URL, Error>) in
-            authSession = ASWebAuthenticationSession(
-                url: authUrl,
-                callbackURLScheme: "timeattack"
-            ) { callbackURL, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                guard let callbackURL = callbackURL else {
-                    continuation.resume(throwing: OAuthError.noCallback)
-                    return
-                }
-                continuation.resume(returning: callbackURL)
+
+            server = LocalOAuthServer(port: callbackPort) { [weak self] url in
+                self?.server?.stop()
+                self?.server = nil
+                continuation.resume(returning: url)
             }
 
-            authSession?.presentationContextProvider = self
-            authSession?.prefersEphemeralWebBrowserSession = false
-            authSession?.start()
+            do {
+                try server?.start()
+                print("🔐 [OAuth] Local server started on port \(callbackPort)")
+
+                NSWorkspace.shared.open(authUrl)
+                print("🔐 [OAuth] Opened browser for authentication")
+            } catch {
+                continuation.resume(throwing: error)
+            }
         }
+
+        print("🔐 [OAuth] Callback received: \(callbackUrl)")
 
         guard let components = URLComponents(url: callbackUrl, resolvingAgainstBaseURL: false),
             let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
@@ -93,6 +100,7 @@ final class LinearOAuthClient: NSObject {
             throw OAuthError.invalidCallback
         }
 
+        print("🔐 [OAuth] Authorization code received, exchanging for token...")
         return try await exchangeCodeForToken(code: code)
     }
 
@@ -117,20 +125,20 @@ final class LinearOAuthClient: NSObject {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-            httpResponse.statusCode == 200
-        else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OAuthError.tokenExchangeFailed
+        }
+
+        if httpResponse.statusCode != 200 {
+            let responseBody = String(data: data, encoding: .utf8) ?? "No response body"
+            print("🔐 [OAuth] Token exchange failed: \(httpResponse.statusCode)")
+            print("🔐 [OAuth] Response: \(responseBody)")
             throw OAuthError.tokenExchangeFailed
         }
 
         let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
+        print("🔐 [OAuth] Token received successfully")
         return tokenResponse.accessToken
-    }
-}
-
-extension LinearOAuthClient: ASWebAuthenticationPresentationContextProviding {
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        ASPresentationAnchor()
     }
 }
 
@@ -139,6 +147,7 @@ enum OAuthError: Error, LocalizedError {
     case noCallback
     case invalidCallback
     case tokenExchangeFailed
+    case serverStartFailed
 
     var errorDescription: String? {
         switch self {
@@ -146,6 +155,7 @@ enum OAuthError: Error, LocalizedError {
         case .noCallback: return "No callback received"
         case .invalidCallback: return "Invalid callback parameters"
         case .tokenExchangeFailed: return "Failed to exchange code for token"
+        case .serverStartFailed: return "Failed to start local OAuth server"
         }
     }
 }

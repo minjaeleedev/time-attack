@@ -1,4 +1,5 @@
 .env
+Sources/TimeAttackApp/env
 .build/
 
 # Xcode

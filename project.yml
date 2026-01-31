@@ -34,11 +34,21 @@ targets:
     platform: macOS
     sources:
       - path: Sources/TimeAttackApp
+        excludes:
+          - env
+      - path: Sources/TimeAttackApp/env
+        buildPhase: resources
+        type: file
     resources:
       - path: Sources/Resources/Info.plist
         buildPhase: none
     info:
       path: Sources/Resources/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: com.miles.TimeAttackApp
+            CFBundleURLSchemes:
+              - timeattack
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.miles.TimeAttackApp
       PRODUCT_NAME: TimeAttack
