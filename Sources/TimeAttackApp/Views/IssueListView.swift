@@ -1,28 +1,31 @@
 import SwiftUI
 import TimeAttackCore
 
-// MARK: - IssueListView
-// 이슈 목록을 표시하는 메인 화면
-// Linear에서 가져온 티켓들을 리스트로 보여준다
 struct IssueListView: View {
-    // @EnvironmentObject: 상위 View에서 주입된 공유 상태 객체
-    // 앱 전체에서 공유되는 데이터 (티켓 목록, 로그인 상태 등)
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var taskManager: TaskManager
+    @StateObject private var focusManager = FocusManager()
+
+    @State private var showingQuickCreate = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // 활성화된 세션 헤더 표시
             if let activeSession = appState.activeSession {
                 if activeSession.mode.isRest {
                     RestTimerHeader(session: activeSession)
-                } else if let activeTicket = appState.tickets.first(where: { $0.id == activeSession.ticketId }) {
+                } else if let activeTicket = taskManager.tasks.first(where: { $0.id == activeSession.ticketId }) {
                     ActiveTimerHeader(ticket: activeTicket, session: activeSession)
                 }
             }
 
-            // 콘텐츠 영역: 로딩 / 빈 상태 / 목록 중 하나를 표시
             content
         }
+        .focusable()
+        .keyboardNavigation(
+            focusManager: focusManager,
+            onSelect: handleSelect,
+            onQuickCreate: { showingQuickCreate = true }
+        )
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {
@@ -34,22 +37,23 @@ struct IssueListView: View {
             }
             ToolbarItem(placement: .automatic) {
                 Button {
-                    appState.showCreateIssueSheet = true
+                    showingQuickCreate = true
                 } label: {
-                    Label("새 이슈", systemImage: "plus.square")
+                    Label("새 태스크", systemImage: "plus.square")
                 }
+                .keyboardShortcut("n", modifiers: .command)
             }
             ToolbarItem(placement: .primaryAction) {
-                Button(action: refreshIssues) {
+                Button(action: refreshTasks) {
                     Image(systemName: "arrow.clockwise")
                 }
-                .disabled(appState.isLoading)
+                .disabled(taskManager.isLoading)
             }
         }
-        // .task: View가 나타날 때 비동기 작업 실행
         .task {
-            if appState.tickets.isEmpty {
-                refreshIssues()
+            focusManager.configure(with: taskManager)
+            if taskManager.tasks.isEmpty {
+                await refreshTasksAsync()
             }
             await loadLinearMetadata()
         }
@@ -64,6 +68,11 @@ struct IssueListView: View {
         }
         .sheet(isPresented: $appState.showCreateIssueSheet) {
             CreateIssueSheet()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showingQuickCreate) {
+            QuickCreateTaskSheet()
+                .environmentObject(taskManager)
                 .environmentObject(appState)
         }
         .alert(
@@ -110,61 +119,76 @@ struct IssueListView: View {
         )
     }
 
-    // MARK: - Content View Builder
-    // @ViewBuilder: 여러 View 중 하나를 조건부로 반환할 수 있게 해주는 속성
     @ViewBuilder
     private var content: some View {
-        if appState.isLoading && appState.tickets.isEmpty {
-            // 로딩 중 + 데이터 없음 → 로딩 인디케이터
-            ProgressView("Loading issues...")
+        if taskManager.isLoading && taskManager.tasks.isEmpty {
+            ProgressView("Loading tasks...")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if appState.tickets.isEmpty {
-            // 로딩 완료 + 데이터 없음 → 빈 상태 표시
+        } else if taskManager.tasks.isEmpty {
             ContentUnavailableView(
-                "No assigned issues",
+                "No tasks",
                 systemImage: "tray",
-                description: Text("You have no issues assigned to you in Linear.")
+                description: Text("Press ⌘N to create a local task, or connect Linear for external tasks.")
             )
         } else {
-            // 데이터 있음 → 이슈 목록 표시
-            ScrollView {
-                // LazyVStack: 화면에 보이는 항목만 렌더링 (성능 최적화)
-                LazyVStack(spacing: 0) {
-                    ForEach(appState.tickets) { ticket in
-                        IssueRowView(ticket: ticket)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(taskManager.tasks) { ticket in
+                            IssueRowView(
+                                ticket: ticket,
+                                isFocused: focusManager.focusedTaskId == ticket.id
+                            )
+                            .id(ticket.id)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                        Divider()
+                            .background(rowBackground(for: ticket))
+                            .onTapGesture {
+                                focusManager.focusedTaskId = ticket.id
+                            }
+                            Divider()
+                        }
+                    }
+                }
+                .onChange(of: focusManager.focusedTaskId) { _, newValue in
+                    if let id = newValue {
+                        withAnimation {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
                     }
                 }
             }
         }
     }
 
-    // MARK: - Actions
-    // @MainActor: 이 함수가 메인 스레드에서 실행되도록 보장
-    // UI 업데이트는 항상 메인 스레드에서 해야 함
-    @MainActor
-    private func refreshIssues() {
-        guard let token = appState.accessToken else { return }
-        appState.isLoading = true
-
-        // Task: 비동기 작업을 시작하는 블록
-        Task {
-            do {
-                // try await: 비동기 함수 호출, 실패하면 catch로 이동
-                let tickets = try await LinearGraphQLClient.shared.fetchAssignedIssues(accessToken: token)
-                appState.tickets = tickets
-                LocalStorage.shared.saveTickets(tickets)
-            } catch LinearAPIError.unauthorized {
-                // 인증 실패 → 로그아웃 처리
-                try? KeychainManager.shared.deleteAccessToken()
-                appState.authState = .unauthenticated
-            } catch {
-                // 기타 에러 → 에러 메시지 표시
-                appState.errorMessage = error.localizedDescription
-            }
-            appState.isLoading = false
+    private func rowBackground(for ticket: Ticket) -> Color {
+        if focusManager.focusedTaskId == ticket.id {
+            return Color.accentColor.opacity(0.1)
         }
+        return Color.clear
+    }
+
+    private func handleSelect() {
+        guard let ticket = focusManager.focusedTicket() else { return }
+
+        if ticket.localEstimate == nil {
+            appState.pendingEstimateTicketId = ticket.id
+        } else {
+            TimerEngine.shared.startWorkSession(ticketId: ticket.id)
+        }
+    }
+
+    @MainActor
+    private func refreshTasks() {
+        Task {
+            await refreshTasksAsync()
+        }
+    }
+
+    private func refreshTasksAsync() async {
+        if let token = appState.accessToken {
+            taskManager.configureLinear(accessToken: token, teamId: appState.selectedTeamId)
+        }
+        await taskManager.refreshAllTasks()
     }
 }

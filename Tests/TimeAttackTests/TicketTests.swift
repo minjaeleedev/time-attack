@@ -7,7 +7,7 @@ final class TicketTests: XCTestCase {
     // MARK: - Helper
 
     private func makeTicket(
-        linearEstimate: Int? = nil,
+        externalEstimate: Int? = nil,
         localEstimate: TimeInterval? = nil,
         dueDate: Date? = nil
     ) -> Ticket {
@@ -15,13 +15,13 @@ final class TicketTests: XCTestCase {
             id: "test-id",
             identifier: "TEST-1",
             title: "Test Ticket",
-            url: "https://linear.app/test",
             state: "In Progress",
-            linearEstimate: linearEstimate,
-            localEstimate: localEstimate,
+            source: .linear(issueId: "test-id", url: "https://linear.app/test"),
             priority: 1,
             updatedAt: Date(),
-            dueDate: dueDate
+            dueDate: dueDate,
+            localEstimate: localEstimate,
+            externalEstimate: externalEstimate
         )
     }
 
@@ -30,13 +30,10 @@ final class TicketTests: XCTestCase {
             id: id,
             identifier: "TEST-\(id)",
             title: "Test Ticket \(id)",
-            url: "https://linear.app/test/\(id)",
             state: "In Progress",
-            linearEstimate: nil,
-            localEstimate: nil,
+            source: .linear(issueId: id, url: "https://linear.app/test/\(id)"),
             priority: 1,
-            updatedAt: Date(),
-            dueDate: nil
+            updatedAt: Date()
         )
     }
 
@@ -48,13 +45,10 @@ final class TicketTests: XCTestCase {
             id: id,
             identifier: "TEST-PARENT",
             title: "Parent Ticket",
-            url: "https://linear.app/test/parent",
             state: "In Progress",
-            linearEstimate: nil,
-            localEstimate: nil,
+            source: .linear(issueId: id, url: "https://linear.app/test/parent"),
             priority: 1,
             updatedAt: Date(),
-            dueDate: nil,
             children: children
         )
     }
@@ -81,8 +75,8 @@ final class TicketTests: XCTestCase {
         }
     }
 
-    func test_displayEstimate_withLinearEstimate_returnsPoints() {
-        let testCases: [(linearEstimate: Int, expected: String)] = [
+    func test_displayEstimate_withExternalEstimate_returnsPoints() {
+        let testCases: [(externalEstimate: Int, expected: String)] = [
             (0, "0 pts"),
             (1, "1 pts"),
             (3, "3 pts"),
@@ -91,17 +85,17 @@ final class TicketTests: XCTestCase {
         ]
 
         for testCase in testCases {
-            let ticket = makeTicket(linearEstimate: testCase.linearEstimate)
+            let ticket = makeTicket(externalEstimate: testCase.externalEstimate)
             XCTAssertEqual(
                 ticket.displayEstimate,
                 testCase.expected,
-                "Expected linearEstimate \(testCase.linearEstimate) to display as '\(testCase.expected)'"
+                "Expected externalEstimate \(testCase.externalEstimate) to display as '\(testCase.expected)'"
             )
         }
     }
 
     func test_displayEstimate_withBothEstimates_prefersLocalEstimate() {
-        let ticket = makeTicket(linearEstimate: 5, localEstimate: 1800)
+        let ticket = makeTicket(externalEstimate: 5, localEstimate: 1800)
 
         XCTAssertEqual(ticket.displayEstimate, "30m")
     }
@@ -178,46 +172,36 @@ final class TicketTests: XCTestCase {
     // MARK: - hasChildren
 
     func test_hasChildren_withNoChildren_returnsFalse() {
-        // Given
         let ticket = makeTicket()
 
-        // When & Then
         XCTAssertFalse(ticket.hasChildren)
     }
 
     func test_hasChildren_withChildren_returnsTrue() {
-        // Given
         let child = makeTicket()
         let parent = makeTicketWithChildren(children: [child])
 
-        // When & Then
         XCTAssertTrue(parent.hasChildren)
     }
 
     // MARK: - allTickets
 
     func test_allTickets_withNoChildren_returnsSelfOnly() {
-        // Given
         let ticket = makeTicket()
 
-        // When
         let allTickets = ticket.allTickets
 
-        // Then
         XCTAssertEqual(allTickets.count, 1)
         XCTAssertEqual(allTickets.first?.id, ticket.id)
     }
 
     func test_allTickets_withChildren_includesChildrenInOrder() {
-        // Given
         let child1 = makeTicketWithId("child-1")
         let child2 = makeTicketWithId("child-2")
         let parent = makeTicketWithChildren(children: [child1, child2])
 
-        // When
         let allTickets = parent.allTickets
 
-        // Then
         XCTAssertEqual(allTickets.count, 3)
         XCTAssertEqual(allTickets[0].id, parent.id)
         XCTAssertEqual(allTickets[1].id, "child-1")
@@ -225,18 +209,57 @@ final class TicketTests: XCTestCase {
     }
 
     func test_allTickets_withNestedChildren_includesGrandchildrenRecursively() {
-        // Given
         let grandchild = makeTicketWithId("grandchild-1")
         let child = makeTicketWithChildren(id: "child-1", children: [grandchild])
         let parent = makeTicketWithChildren(children: [child])
 
-        // When
         let allTickets = parent.allTickets
 
-        // Then
         XCTAssertEqual(allTickets.count, 3)
         XCTAssertEqual(allTickets[0].id, parent.id)
         XCTAssertEqual(allTickets[1].id, "child-1")
         XCTAssertEqual(allTickets[2].id, "grandchild-1")
+    }
+
+    // MARK: - TaskSource
+
+    func test_isLocal_withLocalSource_returnsTrue() {
+        let ticket = Ticket(
+            id: "local-1",
+            identifier: "LOCAL-1",
+            title: "Local Task",
+            state: "Todo",
+            source: .local,
+            priority: 0,
+            updatedAt: Date()
+        )
+
+        XCTAssertTrue(ticket.isLocal)
+    }
+
+    func test_isLocal_withLinearSource_returnsFalse() {
+        let ticket = makeTicket()
+
+        XCTAssertFalse(ticket.isLocal)
+    }
+
+    func test_url_withLocalSource_returnsNil() {
+        let ticket = Ticket(
+            id: "local-1",
+            identifier: "LOCAL-1",
+            title: "Local Task",
+            state: "Todo",
+            source: .local,
+            priority: 0,
+            updatedAt: Date()
+        )
+
+        XCTAssertNil(ticket.url)
+    }
+
+    func test_url_withLinearSource_returnsUrl() {
+        let ticket = makeTicket()
+
+        XCTAssertEqual(ticket.url, "https://linear.app/test")
     }
 }
