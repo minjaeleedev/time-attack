@@ -1,6 +1,13 @@
 import Foundation
 import TimeAttackCore
 
+struct ProviderSettings: Codable, Equatable {
+    var linearEnabled: Bool
+    var localEnabled: Bool
+
+    static let `default` = ProviderSettings(linearEnabled: true, localEnabled: true)
+}
+
 final class LocalStorage {
     static let shared = LocalStorage()
 
@@ -9,6 +16,9 @@ final class LocalStorage {
     private let estimatesKey = "local_estimates"
     private let suspendedSessionsKey = "suspended_sessions"
     private let transitionRecordsKey = "transition_records"
+    private let localTasksKey = "local_tasks"
+    private let providerSettingsKey = "provider_settings"
+    private let localTaskCounterKey = "local_task_counter"
 
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -83,5 +93,38 @@ final class LocalStorage {
             return []
         }
         return records
+    }
+
+    func saveLocalTasks(_ tasks: [Ticket]) {
+        guard let data = try? encoder.encode(tasks) else { return }
+        UserDefaults.standard.set(data, forKey: localTasksKey)
+    }
+
+    func loadLocalTasks() -> [Ticket] {
+        guard let data = UserDefaults.standard.data(forKey: localTasksKey),
+              let tasks = try? decoder.decode([Ticket].self, from: data) else {
+            return []
+        }
+        return tasks
+    }
+
+    func saveProviderSettings(_ settings: ProviderSettings) {
+        guard let data = try? encoder.encode(settings) else { return }
+        UserDefaults.standard.set(data, forKey: providerSettingsKey)
+    }
+
+    func loadProviderSettings() -> ProviderSettings {
+        guard let data = UserDefaults.standard.data(forKey: providerSettingsKey),
+              let settings = try? decoder.decode(ProviderSettings.self, from: data) else {
+            return .default
+        }
+        return settings
+    }
+
+    func getNextLocalTaskNumber() -> Int {
+        let current = UserDefaults.standard.integer(forKey: localTaskCounterKey)
+        let next = current + 1
+        UserDefaults.standard.set(next, forKey: localTaskCounterKey)
+        return next
     }
 }

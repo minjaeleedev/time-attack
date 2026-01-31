@@ -3,6 +3,7 @@ import TimeAttackCore
 
 struct SessionStartSheet: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var taskManager: TaskManager
     @State private var selectedOption: SessionStartOption = .work
     @State private var restMinutes: String = "5"
     @State private var selectedTicketId: String?
@@ -56,7 +57,7 @@ struct SessionStartSheet: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            if appState.tickets.isEmpty {
+            if taskManager.tasks.isEmpty {
                 Text("할당된 티켓이 없습니다")
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -64,7 +65,7 @@ struct SessionStartSheet: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 4) {
-                        ForEach(appState.tickets) { ticket in
+                        ForEach(taskManager.tasks) { ticket in
                             TicketSelectionRow(
                                 ticket: ticket,
                                 isSelected: selectedTicketId == ticket.id
@@ -118,7 +119,7 @@ struct SessionStartSheet: View {
         switch selectedOption {
         case .work:
             if let ticketId = selectedTicketId {
-                if let ticket = appState.tickets.first(where: { $0.id == ticketId }),
+                if let ticket = taskManager.tasks.first(where: { $0.id == ticketId }),
                    ticket.localEstimate == nil {
                     appState.pendingEstimateTicketId = ticketId
                 } else {
@@ -142,9 +143,12 @@ private struct TicketSelectionRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(ticket.identifier)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 4) {
+                    Text(ticket.identifier)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    TaskSourceBadge(source: ticket.source)
+                }
                 Text(ticket.title)
                     .lineLimit(1)
                     .font(.callout)

@@ -4,42 +4,52 @@ public struct Ticket: Identifiable, Codable, Equatable {
     public let id: String
     public let identifier: String
     public let title: String
-    public let url: String
     public let state: String
-    public let linearEstimate: Int?
-    public var localEstimate: TimeInterval?
+    public let source: TaskSource
     public let priority: Int
     public let updatedAt: Date
+    public let createdAt: Date
     public let dueDate: Date?
     public let parentId: String?
     public var children: [Ticket]
+    public var localEstimate: TimeInterval?
+    public var notes: String?
+    public let externalEstimate: Int?
 
     public init(
         id: String,
         identifier: String,
         title: String,
-        url: String,
         state: String,
-        linearEstimate: Int?,
-        localEstimate: TimeInterval?,
+        source: TaskSource,
         priority: Int,
         updatedAt: Date,
+        createdAt: Date = Date(),
         dueDate: Date? = nil,
         parentId: String? = nil,
-        children: [Ticket] = []
+        children: [Ticket] = [],
+        localEstimate: TimeInterval? = nil,
+        notes: String? = nil,
+        externalEstimate: Int? = nil
     ) {
         self.id = id
         self.identifier = identifier
         self.title = title
-        self.url = url
         self.state = state
-        self.linearEstimate = linearEstimate
-        self.localEstimate = localEstimate
+        self.source = source
         self.priority = priority
         self.updatedAt = updatedAt
+        self.createdAt = createdAt
         self.dueDate = dueDate
         self.parentId = parentId
         self.children = children
+        self.localEstimate = localEstimate
+        self.notes = notes
+        self.externalEstimate = externalEstimate
+    }
+
+    public var url: String? {
+        source.externalUrl?.absoluteString
     }
 
     public var dueDateStatus: TicketDueDateStatus {
@@ -81,10 +91,14 @@ public struct Ticket: Identifiable, Codable, Equatable {
             }
             return "\(minutes)m"
         }
-        if let linear = linearEstimate {
-            return "\(linear) pts"
+        if let external = externalEstimate {
+            return "\(external) pts"
         }
         return "No estimate"
+    }
+
+    public var isLocal: Bool {
+        !source.isExternal
     }
 
     public func withState(_ newState: String, updatedAt: Date = Date()) -> Ticket {
@@ -92,15 +106,55 @@ public struct Ticket: Identifiable, Codable, Equatable {
             id: id,
             identifier: identifier,
             title: title,
-            url: url,
             state: newState,
-            linearEstimate: linearEstimate,
-            localEstimate: localEstimate,
+            source: source,
             priority: priority,
             updatedAt: updatedAt,
+            createdAt: createdAt,
             dueDate: dueDate,
             parentId: parentId,
-            children: children
+            children: children,
+            localEstimate: localEstimate,
+            notes: notes,
+            externalEstimate: externalEstimate
+        )
+    }
+
+    public func withNotes(_ newNotes: String?) -> Ticket {
+        Ticket(
+            id: id,
+            identifier: identifier,
+            title: title,
+            state: state,
+            source: source,
+            priority: priority,
+            updatedAt: Date(),
+            createdAt: createdAt,
+            dueDate: dueDate,
+            parentId: parentId,
+            children: children,
+            localEstimate: localEstimate,
+            notes: newNotes,
+            externalEstimate: externalEstimate
+        )
+    }
+
+    public func withLocalEstimate(_ estimate: TimeInterval?) -> Ticket {
+        Ticket(
+            id: id,
+            identifier: identifier,
+            title: title,
+            state: state,
+            source: source,
+            priority: priority,
+            updatedAt: Date(),
+            createdAt: createdAt,
+            dueDate: dueDate,
+            parentId: parentId,
+            children: children,
+            localEstimate: estimate,
+            notes: notes,
+            externalEstimate: externalEstimate
         )
     }
 }

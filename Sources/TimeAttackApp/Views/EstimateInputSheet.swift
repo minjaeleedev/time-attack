@@ -3,6 +3,7 @@ import TimeAttackCore
 
 struct EstimateInputSheet: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var taskManager: TaskManager
     let ticketId: String
     @Binding var isPresented: Bool
 
@@ -10,7 +11,7 @@ struct EstimateInputSheet: View {
     @FocusState private var isFocused: Bool
 
     private var ticket: Ticket? {
-        appState.tickets.first { $0.id == ticketId }
+        taskManager.tasks.first { $0.id == ticketId }
     }
 
     var body: some View {
@@ -26,9 +27,12 @@ struct EstimateInputSheet: View {
 
             if let ticket = ticket {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(ticket.identifier)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Text(ticket.identifier)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        TaskSourceBadge(source: ticket.source)
+                    }
                     Text(ticket.title)
                         .lineLimit(2)
                 }
@@ -94,12 +98,7 @@ struct EstimateInputSheet: View {
         guard let minutes = Int(estimateMinutes), minutes > 0 else { return }
 
         let seconds = TimeInterval(minutes * 60)
-
-        if let index = appState.tickets.firstIndex(where: { $0.id == ticketId }) {
-            appState.tickets[index].localEstimate = seconds
-            LocalStorage.shared.saveEstimate(ticketId: ticketId, estimate: seconds)
-            LocalStorage.shared.saveTickets(appState.tickets)
-        }
+        taskManager.updateLocalEstimate(taskId: ticketId, estimate: seconds)
 
         TimerEngine.shared.startWorkSession(ticketId: ticketId)
         isPresented = false

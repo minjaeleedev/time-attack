@@ -2,11 +2,12 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var taskManager: TaskManager
     @State private var selectedTab = 0
 
     var body: some View {
         Group {
-            if appState.isAuthenticated {
+            if appState.isAuthenticated || taskManager.providerSettings.localEnabled {
                 TabView(selection: $selectedTab) {
                     IssueListView()
                         .tabItem {
@@ -23,12 +24,24 @@ struct ContentView: View {
                 .frame(minWidth: 500, minHeight: 400)
                 .toolbar {
                     ToolbarItem(placement: .automatic) {
-                        Button(action: {
-                            appState.logout()
-                        }) {
-                            Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
+                        Menu {
+                            Button(action: {
+                                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                            }) {
+                                Label("Provider Settings", systemImage: "gear")
+                            }
+                            Divider()
+                            if appState.isAuthenticated {
+                                Button(action: {
+                                    appState.logout()
+                                }) {
+                                    Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
                         }
-                        .help("로그아웃")
+                        .help("Settings")
                     }
                 }
             } else {

@@ -124,15 +124,15 @@ final class LinearGraphQLClient {
                 id: node.id,
                 identifier: node.identifier,
                 title: node.title,
-                url: node.url,
                 state: node.state.name,
-                linearEstimate: node.estimate,
-                localEstimate: estimates[node.id],
+                source: .linear(issueId: node.id, url: node.url),
                 priority: node.priority,
                 updatedAt: dateFormatter.date(from: node.updatedAt) ?? Date(),
                 dueDate: dueDate,
                 parentId: node.parent?.id,
-                children: children
+                children: children,
+                localEstimate: estimates[node.id],
+                externalEstimate: node.estimate
             )
         }
 
@@ -293,15 +293,12 @@ final class LinearGraphQLClient {
             id: issue.id,
             identifier: issue.identifier,
             title: issue.title,
-            url: issue.url,
             state: issue.state.name,
-            linearEstimate: issue.estimate,
-            localEstimate: nil,
+            source: .linear(issueId: issue.id, url: issue.url),
             priority: issue.priority,
             updatedAt: dateFormatter.date(from: issue.updatedAt) ?? Date(),
             dueDate: dueDate,
-            parentId: nil,
-            children: []
+            externalEstimate: issue.estimate
         )
     }
 
