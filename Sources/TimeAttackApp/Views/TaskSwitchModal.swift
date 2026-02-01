@@ -1,26 +1,14 @@
 import SwiftUI
 import TimeAttackCore
 
-enum SwitchType {
-    case toWork
-    case toRest
-    case choice
-}
-
-struct SessionSwitchModal: View {
+struct TaskSwitchModal: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var taskManager: TaskManager
     @Binding var isPresented: Bool
-    let switchType: SwitchType
-    var currentRemainingTime: TimeInterval?
-    var suspendedTicketId: String?
 
-    @State private var selectedOption: SwitchOption = .rest
+    @State private var selectedOption: SwitchOption = .work
     @State private var restMinutes: String = "5"
     @State private var selectedTicketId: String?
-    @State private var transitionStartTime: Date?
-    @State private var transitionElapsed: TimeInterval = 0
-
-    private let transitionTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     enum SwitchOption {
         case rest
@@ -31,23 +19,18 @@ struct SessionSwitchModal: View {
         VStack(spacing: 20) {
             headerView
 
-            if transitionStartTime != nil {
-                transitionTimeView
+            Picker("전환 옵션", selection: $selectedOption) {
+                Text("작업").tag(SwitchOption.work)
+                Text("휴식").tag(SwitchOption.rest)
             }
-
-            if switchType == .choice {
-                Picker("전환 옵션", selection: $selectedOption) {
-                    Text("휴식").tag(SwitchOption.rest)
-                    Text("다른 작업").tag(SwitchOption.work)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
 
             contentView
 
             HStack {
-                Button("취소") {
+                Button("세션 종료") {
+                    TimerEngine.shared.endSession()
                     isPresented = false
                 }
                 .keyboardShortcut(.cancelAction)
@@ -64,85 +47,29 @@ struct SessionSwitchModal: View {
         }
         .padding()
         .frame(width: 320)
-        .onAppear {
-            if switchType == .toWork {
-                selectedOption = .work
-            } else if switchType == .toRest {
-                selectedOption = .rest
-            }
-
-            if let remaining = currentRemainingTime, remaining > 0 {
-                TimerEngine.shared.suspendCurrentSession(remainingTime: remaining)
-                transitionStartTime = Date()
-            }
-        }
-        .onReceive(transitionTimer) { _ in
-            if let start = transitionStartTime {
-                transitionElapsed = Date().timeIntervalSince(start)
-            }
-        }
-    }
-
-    private var transitionTimeView: some View {
-        HStack {
-            Image(systemName: "clock.arrow.2.circlepath")
-                .foregroundColor(.secondary)
-            Text("전환 시간: \(formatTime(transitionElapsed))")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-    }
-
-    private func formatTime(_ interval: TimeInterval) -> String {
-        let minutes = Int(interval) / 60
-        let seconds = Int(interval) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     private var headerView: some View {
         VStack(spacing: 4) {
-            Image(systemName: headerIcon)
+            Image(systemName: "arrow.triangle.2.circlepath")
                 .font(.largeTitle)
-                .foregroundColor(.accentColor)
+                .foregroundColor(.purple)
 
-            Text(headerTitle)
+            Text("다음 태스크 선택")
                 .font(.headline)
         }
     }
 
-    private var headerIcon: String {
-        switch effectiveOption {
-        case .rest: return "cup.and.saucer.fill"
-        case .work: return "play.fill"
-        }
-    }
-
-    private var headerTitle: String {
-        switch switchType {
-        case .toWork: return "작업 시작"
-        case .toRest: return "휴식 시작"
-        case .choice: return "세션 전환"
-        }
-    }
-
     private var actionButtonTitle: String {
-        switch effectiveOption {
+        switch selectedOption {
         case .rest: return "휴식 시작"
         case .work: return "작업 시작"
         }
     }
 
-    private var effectiveOption: SwitchOption {
-        switch switchType {
-        case .toWork: return .work
-        case .toRest: return .rest
-        case .choice: return selectedOption
-        }
-    }
-
     @ViewBuilder
     private var contentView: some View {
-        switch effectiveOption {
+        switch selectedOption {
         case .rest:
             restInputView
         case .work:
@@ -180,7 +107,7 @@ struct SessionSwitchModal: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            if appState.tickets.isEmpty {
+            if taskManager.tasks.isEmpty {
                 Text("할당된 티켓이 없습니다")
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -188,7 +115,7 @@ struct SessionSwitchModal: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 4) {
-                        ForEach(appState.tickets) { ticket in
+                        ForEach(taskManager.tasks) { ticket in
                             TicketSwitchRow(
                                 ticket: ticket,
                                 isSelected: selectedTicketId == ticket.id,
@@ -206,7 +133,7 @@ struct SessionSwitchModal: View {
     }
 
     private var canSwitch: Bool {
-        switch effectiveOption {
+        switch selectedOption {
         case .rest:
             guard let minutes = Int(restMinutes) else { return false }
             return minutes > 0
@@ -216,21 +143,14 @@ struct SessionSwitchModal: View {
     }
 
     private func performSwitch() {
-        if transitionElapsed > 0 {
-            TimerEngine.shared.recordTransitionTime(
-                duration: transitionElapsed,
-                fromTicketId: suspendedTicketId
-            )
-        }
-
-        switch effectiveOption {
+        switch selectedOption {
         case .rest:
             if let minutes = Int(restMinutes), minutes > 0 {
                 TimerEngine.shared.switchToRest(duration: TimeInterval(minutes * 60))
             }
         case .work:
             if let ticketId = selectedTicketId {
-                if let ticket = appState.tickets.first(where: { $0.id == ticketId }),
+                if let ticket = taskManager.tasks.first(where: { $0.id == ticketId }),
                    ticket.localEstimate == nil {
                     appState.pendingEstimateTicketId = ticketId
                 } else {
@@ -245,7 +165,7 @@ struct SessionSwitchModal: View {
 private struct TicketSwitchRow: View {
     let ticket: Ticket
     let isSelected: Bool
-    var suspendedSession: SuspendedSession? = nil
+    var suspendedSession: SuspendedSession?
 
     var body: some View {
         HStack {

@@ -78,7 +78,7 @@ struct IssueRowView: View {
     }
 
     private var isActiveTicket: Bool {
-        appState.activeSession?.ticketId == ticket.id
+        appState.activeWorkTicketId == ticket.id
     }
 
     private func startEditingEstimate() {
@@ -101,12 +101,12 @@ struct IssueRowView: View {
 
     private func toggleTimer() {
         if isActiveTicket {
-            TimerEngine.shared.stopSession()
+            TimerEngine.shared.endSession()
         } else {
             if ticket.localEstimate == nil {
                 appState.pendingEstimateTicketId = ticket.id
             } else {
-                TimerEngine.shared.startWorkSession(ticketId: ticket.id)
+                TimerEngine.shared.startWorkTask(ticketId: ticket.id)
             }
         }
     }
@@ -175,7 +175,7 @@ private struct StateBadge: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .disabled(appState.isUpdatingIssueState)
+        .disabled(taskManager.isUpdatingTaskState)
         .onAppear {
             loadStatesIfNeeded()
         }
@@ -212,7 +212,7 @@ private struct StateBadge: View {
 
     private func changeLinearState(to workflowState: WorkflowState) {
         Task {
-            _ = await appState.updateIssueState(ticketId: ticket.id, stateId: workflowState.id)
+            try? await taskManager.updateTaskState(task: ticket, newState: workflowState.id)
         }
     }
 }

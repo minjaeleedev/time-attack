@@ -7,44 +7,158 @@ final class TimerEngine: ObservableObject {
     static let shared = TimerEngine()
 
     private weak var appState: AppState?
+    private weak var taskManager: TaskManager?
 
     private init() {
         requestNotificationPermission()
     }
 
-    func setAppState(_ state: AppState) {
-        self.appState = state
-        state.sessions = LocalStorage.shared.loadSessions()
-        state.suspendedSessions = LocalStorage.shared.loadSuspendedSessions()
-        state.transitionRecords = LocalStorage.shared.loadTransitionRecords()
+    func configure(appState: AppState, taskManager: TaskManager) {
+        self.appState = appState
+        self.taskManager = taskManager
+        appState.sessions = LocalStorage.shared.loadSessions()
+        appState.suspendedSessions = LocalStorage.shared.loadSuspendedSessions()
+        appState.transitionRecords = LocalStorage.shared.loadTransitionRecords()
     }
 
-    // MARK: - Work Session
+    // MARK: - Session Lifecycle
+
+    func startSession() {
+        guard let appState = appState else { return }
+        guard appState.currentSession == nil else { return }
+
+        let session = Session()
+        let decidingTask = SessionTask(
+            sessionId: session.id,
+            type: .deciding
+        )
+
+        let sessionWithTask = session.appendingTask(decidingTask)
+        appState.currentSession = sessionWithTask
+        appState.sessions.append(sessionWithTask)
+        saveSessions()
+
+        appState.showingTaskSelection = true
+    }
+
+    func endSession() {
+        guard let appState = appState,
+              var session = appState.currentSession else { return }
+
+        endActiveTask()
+
+        session = appState.currentSession ?? session
+        let completedSession = session.withEndTime(Date())
+
+        if let index = appState.sessions.firstIndex(where: { $0.id == session.id }) {
+            appState.sessions[index] = completedSession
+        }
+
+        appState.completedSession = completedSession
+        appState.currentSession = nil
+        saveSessions()
+
+        cancelPendingNotifications()
+        appState.showingSessionReport = true
+    }
+
+    // MARK: - Task Lifecycle
+
+    func startTask(type: TaskType, initialRemainingTime: TimeInterval? = nil) {
+        guard let appState = appState,
+              var session = appState.currentSession else { return }
+
+        endActiveTask()
+
+        session = appState.currentSession ?? session
+
+        let task = SessionTask(
+            sessionId: session.id,
+            type: type,
+            initialRemainingTime: initialRemainingTime
+        )
+
+        session = session.appendingTask(task)
+        appState.currentSession = session
+
+        if let index = appState.sessions.firstIndex(where: { $0.id == session.id }) {
+            appState.sessions[index] = session
+        }
+
+        saveSessions()
+
+        if case .work(let ticketId) = type {
+            autoTransitionToInProgress(ticketId: ticketId)
+        } else if case .rest(let duration) = type {
+            scheduleRestEndNotification(duration: duration)
+        }
+    }
+
+    func endActiveTask() {
+        guard let appState = appState,
+              var session = appState.currentSession,
+              var task = session.activeTask else { return }
+
+        if task.isPaused, !task.pausedIntervals.isEmpty {
+            var intervals = task.pausedIntervals
+            let lastIndex = intervals.count - 1
+            intervals[lastIndex] = intervals[lastIndex].withEnd(Date())
+            task = task.withPausedIntervals(intervals)
+        }
+
+        task = task.withEndTime(Date())
+        session = session.updatingTask(task)
+        appState.currentSession = session
+
+        if let index = appState.sessions.firstIndex(where: { $0.id == session.id }) {
+            appState.sessions[index] = session
+        }
+
+        saveSessions()
+        cancelPendingNotifications()
+    }
+
+    func startTransitionTask(fromTicketId: String?) {
+        guard let appState = appState,
+              appState.currentSession != nil else { return }
+
+        startTask(type: .transitioning(fromTicketId: fromTicketId))
+        appState.showingTaskSwitch = true
+    }
+
+    // MARK: - Work Session (Convenience)
 
     func startWorkSession(ticketId: String) {
-        guard let appState = appState else { return }
-
-        let session = Session(ticketId: ticketId, mode: .work(ticketId: ticketId))
-        appState.activeSession = session
-        appState.sessions.append(session)
-        saveSessions()
-
-        autoTransitionToInProgress(ticketId: ticketId)
+        startTask(type: .work(ticketId: ticketId))
     }
 
-    // MARK: - Rest Session
+    func startWorkTask(ticketId: String) {
+        if appState?.currentSession == nil {
+            startSession()
+            appState?.showingTaskSelection = false
+        }
+
+        if let suspended = appState?.suspendedSessions[ticketId] {
+            startTask(
+                type: .work(ticketId: ticketId),
+                initialRemainingTime: suspended.remainingTime
+            )
+            appState?.suspendedSessions.removeValue(forKey: ticketId)
+            saveSuspendedSessions()
+        } else {
+            startTask(type: .work(ticketId: ticketId))
+        }
+    }
+
+    // MARK: - Rest Session (Convenience)
 
     func startRestSession(duration: TimeInterval) {
-        guard let appState = appState else { return }
+        if appState?.currentSession == nil {
+            startSession()
+            appState?.showingTaskSelection = false
+        }
 
-        stopSession()
-
-        let session = Session.restSession(duration: duration)
-        appState.activeSession = session
-        appState.sessions.append(session)
-        saveSessions()
-
-        scheduleRestEndNotification(duration: duration)
+        startTask(type: .rest(duration: duration))
     }
 
     func switchToRest(duration: TimeInterval) {
@@ -52,87 +166,64 @@ final class TimerEngine: ObservableObject {
     }
 
     func switchToWork(ticketId: String) {
-        stopSession()
-        resumeWorkSession(ticketId: ticketId)
+        startWorkTask(ticketId: ticketId)
     }
 
     // MARK: - Suspend/Resume
 
-    func suspendCurrentSession(remainingTime: TimeInterval) {
+    func suspendCurrentTask(remainingTime: TimeInterval) {
         guard let appState = appState,
-              let session = appState.activeSession,
-              session.mode.isWork else { return }
+              let task = appState.activeTask,
+              let ticketId = task.type.ticketId else { return }
 
         let suspended = SuspendedSession(
-            ticketId: session.ticketId,
+            ticketId: ticketId,
             remainingTime: remainingTime,
             suspendedAt: Date()
         )
-        appState.suspendedSessions[session.ticketId] = suspended
+        appState.suspendedSessions[ticketId] = suspended
         saveSuspendedSessions()
-
-        stopSession()
     }
 
-    func resumeWorkSession(ticketId: String) {
-        guard let appState = appState else { return }
-
-        if let suspended = appState.suspendedSessions[ticketId] {
-            let session = Session(
-                ticketId: ticketId,
-                mode: .work(ticketId: ticketId),
-                initialRemainingTime: suspended.remainingTime
-            )
-            appState.activeSession = session
-            appState.sessions.append(session)
-
-            appState.suspendedSessions.removeValue(forKey: ticketId)
-            saveSuspendedSessions()
-            saveSessions()
-        } else {
-            startWorkSession(ticketId: ticketId)
-        }
-    }
-
-    // MARK: - Session Control
-
-    func stopSession() {
-        guard let appState = appState,
-              var session = appState.activeSession else { return }
-
-        if session.isPaused {
-            session.pausedIntervals[session.pausedIntervals.count - 1].end = Date()
-        }
-
-        session.endTime = Date()
-
-        if let index = appState.sessions.firstIndex(where: { $0.id == session.id }) {
-            appState.sessions[index] = session
-        }
-
-        appState.activeSession = nil
-        saveSessions()
-
-        cancelPendingNotifications()
-    }
+    // MARK: - Pause/Resume
 
     func togglePause() {
         guard let appState = appState,
-              var session = appState.activeSession else { return }
+              var session = appState.currentSession,
+              var task = session.activeTask else { return }
 
-        if session.isPaused {
-            session.pausedIntervals[session.pausedIntervals.count - 1].end = Date()
+        var intervals = task.pausedIntervals
+        if task.isPaused, !intervals.isEmpty {
+            let lastIndex = intervals.count - 1
+            intervals[lastIndex] = intervals[lastIndex].withEnd(Date())
         } else {
-            session.pausedIntervals.append(PausedInterval(start: Date(), end: nil))
+            intervals.append(PausedInterval(start: Date(), end: nil))
         }
 
-        appState.activeSession = session
+        task = task.withPausedIntervals(intervals)
+        session = session.updatingTask(task)
+        appState.currentSession = session
 
         if let index = appState.sessions.firstIndex(where: { $0.id == session.id }) {
             appState.sessions[index] = session
         }
 
         saveSessions()
+    }
+
+    // MARK: - Legacy Support (for backward compatibility)
+
+    func stopSession() {
+        endSession()
+    }
+
+    func suspendCurrentSession(remainingTime: TimeInterval) {
+        suspendCurrentTask(remainingTime: remainingTime)
+        endActiveTask()
+    }
+
+    func resumeWorkSession(ticketId: String) {
+        startWorkTask(ticketId: ticketId)
     }
 
     // MARK: - Persistence
@@ -180,15 +271,14 @@ final class TimerEngine: ObservableObject {
     // MARK: - Auto State Transition
 
     private func autoTransitionToInProgress(ticketId: String) {
-        guard let appState = appState else { return }
+        guard let appState = appState,
+              let taskManager = taskManager else { return }
 
-        guard let ticket = appState.tickets.first(where: { $0.id == ticketId }) else { return }
+        guard let ticket = taskManager.tasks.first(where: { $0.id == ticketId }) else { return }
 
-        // Check current state type using workflow states instead of hardcoded names
         let currentStateType = appState.workflowStatesForCurrentTeam()
             .first { $0.name == ticket.state }?.type
 
-        // If already in started or completed state, don't transition
         guard currentStateType != "started" && currentStateType != "completed" else {
             return
         }
@@ -196,14 +286,15 @@ final class TimerEngine: ObservableObject {
         guard let inProgressState = appState.findInProgressState() else { return }
 
         Task {
-            _ = await appState.updateIssueState(ticketId: ticketId, stateId: inProgressState.id)
+            try? await taskManager.updateTaskState(task: ticket, newState: inProgressState.id)
         }
     }
 
     func promptCompletionStateChange(ticketId: String) {
-        guard let appState = appState else { return }
+        guard let appState = appState,
+              let taskManager = taskManager else { return }
 
-        guard let ticket = appState.tickets.first(where: { $0.id == ticketId }),
+        guard let ticket = taskManager.tasks.first(where: { $0.id == ticketId }),
               let completedState = appState.findCompletedState() else { return }
 
         appState.pendingStateChangeConfirmation = PendingStateChange(

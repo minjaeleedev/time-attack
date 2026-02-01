@@ -17,7 +17,15 @@ struct TimeAttackApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button("새 세션") {
+                    if appState.currentSession == nil {
+                        appState.showingSessionStart = true
+                    }
+                }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(appState.currentSession != nil)
+            }
         }
 
         MenuBarExtra {
@@ -25,16 +33,24 @@ struct TimeAttackApp: App {
                 .environmentObject(appState)
                 .environmentObject(taskManager)
         } label: {
-            Image(systemName: appState.activeSession != nil ? "timer" : "timer.circle")
+            Image(systemName: appState.currentSession != nil ? "timer" : "timer.circle")
         }
     }
 
     private func setupApp() {
-        TimerEngine.shared.setAppState(appState)
+        TimerEngine.shared.configure(appState: appState, taskManager: taskManager)
 
         if let token = KeychainManager.shared.getAccessToken() {
             appState.authState = .authenticated(accessToken: token)
             taskManager.configureLinear(accessToken: token, teamId: appState.selectedTeamId)
+        }
+
+        // 활성 세션이 없고 앱 사용 가능하면 세션 시작 모달 표시
+        if appState.currentSession == nil {
+            let canUseApp = appState.isAuthenticated || taskManager.providerSettings.localEnabled
+            if canUseApp {
+                appState.showingSessionStart = true
+            }
         }
     }
 }
@@ -48,32 +64,8 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let session = appState.activeSession,
-               let ticket = taskManager.tasks.first(where: { $0.id == session.ticketId }) {
-
-                Text(ticket.identifier)
-                    .font(.headline)
-                Text(ticket.title)
-                    .font(.caption)
-                    .lineLimit(1)
-
-                Divider()
-
-                HStack {
-                    Text(formatTime(remaining(ticket: ticket)))
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundColor(remaining(ticket: ticket) < 0 ? .red : .primary)
-
-                    Spacer()
-
-                    Button(session.isPaused ? "Resume" : "Pause") {
-                        TimerEngine.shared.togglePause()
-                    }
-
-                    Button("Stop") {
-                        TimerEngine.shared.stopSession()
-                    }
-                }
+            if let task = appState.activeTask {
+                taskContent(task: task)
             } else {
                 Text("No active timer")
                     .foregroundColor(.secondary)
@@ -102,14 +94,135 @@ struct MenuBarView: View {
         }
     }
 
-    private func remaining(ticket: Ticket) -> TimeInterval {
+    @ViewBuilder
+    private func taskContent(task: SessionTask) -> some View {
+        switch task.type {
+        case .work(let ticketId):
+            if let ticket = taskManager.tasks.first(where: { $0.id == ticketId }) {
+                workTaskContent(ticket: ticket, task: task)
+            }
+        case .rest(let duration):
+            restTaskContent(duration: duration, task: task)
+        case .deciding:
+            decidingContent()
+        case .transitioning:
+            transitioningContent()
+        }
+    }
+
+    private func workTaskContent(ticket: Ticket, task: SessionTask) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(ticket.identifier)
+                .font(.headline)
+            Text(ticket.title)
+                .font(.caption)
+                .lineLimit(1)
+
+            Divider()
+
+            HStack {
+                Text(formatTime(remaining(ticket: ticket, task: task)))
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundColor(remaining(ticket: ticket, task: task) < 0 ? .red : .primary)
+
+                Spacer()
+
+                Button(task.isPaused ? "Resume" : "Pause") {
+                    TimerEngine.shared.togglePause()
+                }
+
+                Button("Stop") {
+                    TimerEngine.shared.endSession()
+                }
+            }
+        }
+    }
+
+    private func restTaskContent(duration: TimeInterval, task: SessionTask) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "cup.and.saucer.fill")
+                    .foregroundColor(.green)
+                Text("휴식 중")
+                    .font(.headline)
+            }
+
+            Divider()
+
+            HStack {
+                Text(formatTime(duration - elapsed))
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundColor(duration - elapsed < 0 ? .orange : .primary)
+
+                Spacer()
+
+                Button("Stop") {
+                    TimerEngine.shared.endSession()
+                }
+            }
+        }
+    }
+
+    private func decidingContent() -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "questionmark.circle.fill")
+                    .foregroundColor(.orange)
+                Text("결정 중")
+                    .font(.headline)
+            }
+
+            Divider()
+
+            HStack {
+                Text("다음 할 일을 선택해주세요")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button("Cancel") {
+                    TimerEngine.shared.endSession()
+                }
+            }
+        }
+    }
+
+    private func transitioningContent() -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .foregroundColor(.purple)
+                Text("전환 중")
+                    .font(.headline)
+            }
+
+            Divider()
+
+            HStack {
+                Text(formatTime(elapsed))
+                    .font(.system(.body, design: .monospaced))
+
+                Spacer()
+
+                Button("Cancel") {
+                    TimerEngine.shared.endSession()
+                }
+            }
+        }
+    }
+
+    private func remaining(ticket: Ticket, task: SessionTask) -> TimeInterval {
+        if let initialRemaining = task.initialRemainingTime {
+            return initialRemaining - elapsed
+        }
         guard let estimate = ticket.localEstimate else { return 0 }
         return estimate - elapsed
     }
 
     private func updateElapsed() {
-        guard let session = appState.activeSession, !session.isPaused else { return }
-        elapsed = Date().timeIntervalSince(session.startTime) - session.totalPausedTime
+        guard let task = appState.activeTask, !task.isPaused else { return }
+        elapsed = Date().timeIntervalSince(task.startTime) - task.totalPausedTime
     }
 
     private func formatTime(_ interval: TimeInterval) -> String {

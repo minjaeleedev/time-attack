@@ -125,6 +125,32 @@ final class PausedIntervalTests: XCTestCase {
         XCTAssertNil(decoded.end)
     }
 
+    // MARK: - withEnd(_:) Immutable Update
+
+    func test_withEnd_createsNewIntervalWithEnd() {
+        let start = Date()
+        let interval = PausedInterval(start: start, end: nil)
+        let endTime = start.addingTimeInterval(60)
+
+        let updatedInterval = interval.withEnd(endTime)
+
+        XCTAssertEqual(updatedInterval.start, start)
+        XCTAssertEqual(updatedInterval.end, endTime)
+        XCTAssertNil(interval.end, "Original should remain unchanged")
+    }
+
+    func test_withEnd_replacesExistingEnd() {
+        let start = Date()
+        let originalEnd = start.addingTimeInterval(30)
+        let newEnd = start.addingTimeInterval(60)
+        let interval = PausedInterval(start: start, end: originalEnd)
+
+        let updatedInterval = interval.withEnd(newEnd)
+
+        XCTAssertEqual(updatedInterval.end, newEnd)
+        XCTAssertEqual(interval.end, originalEnd, "Original should remain unchanged")
+    }
+
     // MARK: - Duration Calculation (Example usage pattern)
 
     func test_duration_calculation_forCompletedInterval() {

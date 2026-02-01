@@ -6,11 +6,10 @@ import TimeAttackCore
 // 현재 작업 중인 티켓 정보, 남은 시간, 일시정지/정지 버튼 포함
 struct ActiveTimerHeader: View {
     let ticket: Ticket
-    let session: Session
+    let task: SessionTask
 
     // @State: View 내부 상태 - 경과 시간을 추적
     @State private var elapsed: TimeInterval = 0
-    @State private var showingSessionSwitch = false
 
     // Timer.publish: 1초마다 이벤트를 발생시키는 타이머
     // autoconnect(): 자동으로 타이머 시작
@@ -31,14 +30,6 @@ struct ActiveTimerHeader: View {
         }
         .onAppear {
             updateElapsed()
-        }
-        .sheet(isPresented: $showingSessionSwitch) {
-            SessionSwitchModal(
-                isPresented: $showingSessionSwitch,
-                switchType: .choice,
-                currentRemainingTime: remaining,
-                suspendedTicketId: session.ticketId
-            )
         }
     }
 
@@ -72,16 +63,17 @@ struct ActiveTimerHeader: View {
 
     private var controlButtons: some View {
         HStack(spacing: 8) {
-            // 일시정지 버튼 - 모달 표시
+            // 전환 버튼 - transitioning 태스크 시작
             Button(action: {
-                showingSessionSwitch = true
+                TimerEngine.shared.suspendCurrentTask(remainingTime: remaining > 0 ? remaining : 0)
+                TimerEngine.shared.startTransitionTask(fromTicketId: task.type.ticketId)
             }) {
-                Image(systemName: "pause.fill")
+                Image(systemName: "arrow.triangle.2.circlepath")
             }
             .buttonStyle(.borderless)
 
             // 정지 버튼
-            Button(action: { TimerEngine.shared.stopSession() }) {
+            Button(action: { TimerEngine.shared.endSession() }) {
                 Image(systemName: "stop.fill")
             }
             .buttonStyle(.borderless)
@@ -93,7 +85,7 @@ struct ActiveTimerHeader: View {
     // 남은 시간 = 예상 시간 - 경과 시간
     // 재개된 세션의 경우 initialRemainingTime 사용
     private var remaining: TimeInterval {
-        if let initialRemaining = session.initialRemainingTime {
+        if let initialRemaining = task.initialRemainingTime {
             return initialRemaining - elapsed
         }
         guard let estimate = ticket.localEstimate else { return 0 }
@@ -104,9 +96,9 @@ struct ActiveTimerHeader: View {
 
     private func updateElapsed() {
         // 일시정지 상태면 업데이트 안 함
-        guard !session.isPaused else { return }
+        guard !task.isPaused else { return }
         // 경과 시간 = 현재 시간 - 시작 시간 - 일시정지된 총 시간
-        elapsed = Date().timeIntervalSince(session.startTime) - session.totalPausedTime
+        elapsed = Date().timeIntervalSince(task.startTime) - task.totalPausedTime
     }
 
     // 시간을 "MM:SS" 또는 "H:MM:SS" 형식으로 변환

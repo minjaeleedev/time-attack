@@ -11,22 +11,23 @@ struct PendingStateChange: Identifiable {
 @MainActor
 final class AppState: ObservableObject {
     @Published var authState: AuthState = .unauthenticated
-    @Published var tickets: [Ticket] = []
     @Published var sessions: [Session] = []
-    @Published var activeSession: Session?
+    @Published var currentSession: Session?
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var pendingEstimateTicketId: String?
     @Published var showingSessionStart = false
+    @Published var showingTaskSelection = false
+    @Published var showingTaskSwitch = false
+    @Published var showingSessionReport = false
     @Published var suspendedSessions: [String: SuspendedSession] = [:]
     @Published var transitionRecords: [TransitionRecord] = []
+    @Published var completedSession: Session?
 
     // Linear API related state
     @Published var teams: [Team] = []
     @Published var workflowStates: [String: [WorkflowState]] = [:]
     @Published var showCreateIssueSheet = false
-    @Published var isCreatingIssue = false
-    @Published var isUpdatingIssueState = false
     @Published var selectedTeamId: String?
     @Published var pendingStateChangeConfirmation: PendingStateChange?
 
@@ -38,12 +39,24 @@ final class AppState: ObservableObject {
         authState.accessToken
     }
 
+    var activeSession: Session? {
+        currentSession
+    }
+
+    var activeTask: SessionTask? {
+        currentSession?.activeTask
+    }
+
+    var activeWorkTicketId: String? {
+        guard let task = activeTask, task.type.isWork else { return nil }
+        return task.type.ticketId
+    }
+
     func logout() {
         try? KeychainManager.shared.deleteAccessToken()
         authState = .unauthenticated
-        tickets = []
         sessions = []
-        activeSession = nil
+        currentSession = nil
         teams = []
         workflowStates = [:]
         selectedTeamId = nil
@@ -76,60 +89,6 @@ final class AppState: ObservableObject {
             workflowStates[teamId] = states
         } catch {
             errorMessage = error.localizedDescription
-        }
-    }
-
-    func createIssue(
-        title: String,
-        teamId: String,
-        description: String?,
-        priority: Int?,
-        estimate: Int?
-    ) async -> Bool {
-        guard let token = accessToken else { return false }
-
-        isCreatingIssue = true
-        defer { isCreatingIssue = false }
-
-        do {
-            let newTicket = try await LinearGraphQLClient.shared.createIssue(
-                title: title,
-                teamId: teamId,
-                description: description,
-                priority: priority,
-                estimate: estimate,
-                accessToken: token
-            )
-            tickets.insert(newTicket, at: 0)
-            LocalStorage.shared.saveTickets(tickets)
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
-        }
-    }
-
-    func updateIssueState(ticketId: String, stateId: String) async -> Bool {
-        guard let token = accessToken else { return false }
-
-        isUpdatingIssueState = true
-        defer { isUpdatingIssueState = false }
-
-        do {
-            let newStateName = try await LinearGraphQLClient.shared.updateIssueState(
-                issueId: ticketId,
-                stateId: stateId,
-                accessToken: token
-            )
-
-            if let index = tickets.firstIndex(where: { $0.id == ticketId }) {
-                tickets[index] = tickets[index].withState(newStateName)
-                LocalStorage.shared.saveTickets(tickets)
-            }
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
         }
     }
 
