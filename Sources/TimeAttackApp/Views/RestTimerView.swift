@@ -2,15 +2,14 @@ import SwiftUI
 import TimeAttackCore
 
 struct RestTimerHeader: View {
-    let session: Session
+    let task: SessionTask
 
     @State private var elapsed: TimeInterval = 0
-    @State private var showingSessionSwitch = false
 
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var restDuration: TimeInterval {
-        session.mode.restDuration ?? 0
+        task.type.restDuration ?? 0
     }
 
     private var remaining: TimeInterval {
@@ -50,7 +49,7 @@ struct RestTimerHeader: View {
 
             HStack(spacing: 8) {
                 Button {
-                    showingSessionSwitch = true
+                    TimerEngine.shared.startTransitionTask(fromTicketId: nil)
                 } label: {
                     Text("작업 시작")
                         .font(.caption)
@@ -58,7 +57,7 @@ struct RestTimerHeader: View {
                 .buttonStyle(.borderedProminent)
 
                 Button {
-                    TimerEngine.shared.stopSession()
+                    TimerEngine.shared.endSession()
                 } label: {
                     Image(systemName: "xmark")
                 }
@@ -73,17 +72,11 @@ struct RestTimerHeader: View {
         .onAppear {
             updateElapsed()
         }
-        .sheet(isPresented: $showingSessionSwitch) {
-            SessionSwitchModal(
-                isPresented: $showingSessionSwitch,
-                switchType: .toWork
-            )
-        }
     }
 
     private func updateElapsed() {
-        guard !session.isPaused else { return }
-        elapsed = Date().timeIntervalSince(session.startTime) - session.totalPausedTime
+        guard !task.isPaused else { return }
+        elapsed = Date().timeIntervalSince(task.startTime) - task.totalPausedTime
     }
 
     private func formatTime(_ interval: TimeInterval) -> String {

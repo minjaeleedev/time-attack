@@ -9,14 +9,22 @@ struct ReportView: View {
         appState.sessions.filter { $0.endTime != nil }
     }
 
-    private var sessionsGroupedByTicket: [(Ticket, [Session])] {
-        let grouped = Dictionary(grouping: completedSessions) { $0.ticketId }
-        return grouped.compactMap { ticketId, sessions in
+    private var workTimeByTicket: [(Ticket, TimeInterval)] {
+        var ticketTimes: [String: TimeInterval] = [:]
+
+        for session in completedSessions {
+            for ticketId in session.uniqueTicketIds {
+                let workTime = session.workTimeForTicket(ticketId)
+                ticketTimes[ticketId, default: 0] += workTime
+            }
+        }
+
+        return ticketTimes.compactMap { ticketId, time -> (Ticket, TimeInterval)? in
             guard let ticket = taskManager.tasks.first(where: { $0.id == ticketId }) else {
                 return nil
             }
-            return (ticket, sessions)
-        }.sorted { $0.1.first?.startTime ?? Date.distantPast > $1.1.first?.startTime ?? Date.distantPast }
+            return (ticket, time)
+        }.sorted { $0.1 > $1.1 }
     }
 
     private var weeklyStats: WeeklyStats {
@@ -27,26 +35,33 @@ struct ReportView: View {
             session.startTime >= startOfWeek
         }
 
-        let totalTime = weekSessions.reduce(0.0) { $0 + ($1.actualDuration ?? 0) }
-        let totalEstimate = weekSessions.reduce(0.0) { total, session in
-            guard let ticket = taskManager.tasks.first(where: { $0.id == session.ticketId }),
-                  let estimate = ticket.localEstimate else { return total }
-            return total + estimate
+        let totalWorkTime = weekSessions.reduce(0.0) { $0 + $1.totalWorkTime }
+
+        var totalEstimate: TimeInterval = 0
+        for session in weekSessions {
+            for ticketId in session.uniqueTicketIds {
+                if let ticket = taskManager.tasks.first(where: { $0.id == ticketId }),
+                   let estimate = ticket.localEstimate {
+                    totalEstimate += estimate
+                }
+            }
         }
+
+        let totalOverhead = weekSessions.reduce(0.0) { $0 + $1.totalOverheadTime }
 
         let weekTransitions = appState.transitionRecords.filter { record in
             record.date >= startOfWeek
         }
         let totalTransitionTime = weekTransitions.reduce(0.0) { $0 + $1.duration }
 
-        let accuracy = totalEstimate > 0 ? totalEstimate / totalTime : 0
+        let accuracy = totalEstimate > 0 ? totalEstimate / totalWorkTime : 0
 
         return WeeklyStats(
-            totalTime: totalTime,
+            totalTime: totalWorkTime,
             totalEstimate: totalEstimate,
             accuracy: accuracy,
             sessionCount: weekSessions.count,
-            transitionTime: totalTransitionTime
+            transitionTime: totalTransitionTime + totalOverhead
         )
     }
 
@@ -55,7 +70,7 @@ struct ReportView: View {
             VStack(alignment: .leading, spacing: 20) {
                 WeeklySummaryCard(stats: weeklyStats)
 
-                if sessionsGroupedByTicket.isEmpty {
+                if workTimeByTicket.isEmpty {
                     ContentUnavailableView(
                         "No completed sessions",
                         systemImage: "clock",
@@ -65,8 +80,8 @@ struct ReportView: View {
                     Text("By Ticket")
                         .font(.headline)
 
-                    ForEach(sessionsGroupedByTicket, id: \.0.id) { ticket, sessions in
-                        TicketReportCard(ticket: ticket, sessions: sessions)
+                    ForEach(workTimeByTicket, id: \.0.id) { ticket, totalTime in
+                        TicketReportCard(ticket: ticket, totalActualTime: totalTime)
                     }
                 }
             }
@@ -89,7 +104,7 @@ struct WeeklySummaryCard: View {
                 StatBox(title: "Sessions", value: "\(stats.sessionCount)")
                 if stats.transitionTime > 0 {
                     StatBox(
-                        title: "Transition",
+                        title: "Overhead",
                         value: formatDuration(stats.transitionTime),
                         color: .orange
                     )
@@ -156,15 +171,11 @@ struct StatBox: View {
 
 struct TicketReportCard: View {
     let ticket: Ticket
-    let sessions: [Session]
-
-    private var totalActual: TimeInterval {
-        sessions.reduce(0) { $0 + ($1.actualDuration ?? 0) }
-    }
+    let totalActualTime: TimeInterval
 
     private var accuracy: Double? {
         guard let estimate = ticket.localEstimate, estimate > 0 else { return nil }
-        return estimate / totalActual
+        return estimate / totalActualTime
     }
 
     var body: some View {
@@ -198,9 +209,9 @@ struct TicketReportCard: View {
                 Text("→")
                     .foregroundColor(.secondary)
 
-                Label(formatDuration(totalActual), systemImage: "clock")
+                Label(formatDuration(totalActualTime), systemImage: "clock")
                     .font(.caption)
-                    .foregroundColor(totalActual > (ticket.localEstimate ?? 0) ? .red : .green)
+                    .foregroundColor(totalActualTime > (ticket.localEstimate ?? 0) ? .red : .green)
             }
         }
         .padding()

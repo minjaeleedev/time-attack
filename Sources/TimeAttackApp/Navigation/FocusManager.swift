@@ -21,37 +21,57 @@ final class FocusManager: ObservableObject {
     func moveUp() {
         guard let tasks = taskManager?.tasks, !tasks.isEmpty else { return }
 
+        let newId: String?
         if let currentIndex = focusedIndex {
             let newIndex = max(0, currentIndex - 1)
-            focusedTaskId = tasks[newIndex].id
+            newId = tasks[newIndex].id
         } else {
-            focusedTaskId = tasks.first?.id
+            newId = tasks.first?.id
+        }
+
+        Task { @MainActor in
+            focusedTaskId = newId
         }
     }
 
     func moveDown() {
         guard let tasks = taskManager?.tasks, !tasks.isEmpty else { return }
 
+        let newId: String?
         if let currentIndex = focusedIndex {
             let newIndex = min(tasks.count - 1, currentIndex + 1)
-            focusedTaskId = tasks[newIndex].id
+            newId = tasks[newIndex].id
         } else {
-            focusedTaskId = tasks.first?.id
+            newId = tasks.first?.id
+        }
+
+        Task { @MainActor in
+            focusedTaskId = newId
         }
     }
 
     func selectFirst() {
         guard let tasks = taskManager?.tasks, !tasks.isEmpty else { return }
-        focusedTaskId = tasks.first?.id
+        let newId = tasks.first?.id
+
+        Task { @MainActor in
+            focusedTaskId = newId
+        }
     }
 
     func selectLast() {
         guard let tasks = taskManager?.tasks, !tasks.isEmpty else { return }
-        focusedTaskId = tasks.last?.id
+        let newId = tasks.last?.id
+
+        Task { @MainActor in
+            focusedTaskId = newId
+        }
     }
 
     func clearFocus() {
-        focusedTaskId = nil
+        Task { @MainActor in
+            focusedTaskId = nil
+        }
     }
 
     func focusedTicket() -> Ticket? {

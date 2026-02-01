@@ -3,6 +3,7 @@ import TimeAttackCore
 
 struct CreateIssueSheet: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var taskManager: TaskManager
     @Environment(\.dismiss) private var dismiss
 
     @State private var title = ""
@@ -209,12 +210,12 @@ struct CreateIssueSheet: View {
     private var canCreate: Bool {
         !title.trimmingCharacters(in: .whitespaces).isEmpty &&
         appState.selectedTeamId != nil &&
-        !appState.isCreatingIssue
+        !taskManager.isCreatingTask
     }
 
     private func createIssue() {
         guard let teamId = appState.selectedTeamId,
-              !appState.isCreatingIssue else { return }
+              !taskManager.isCreatingTask else { return }
 
         let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
         let trimmedDescription = description.trimmingCharacters(in: .whitespaces)
@@ -222,23 +223,25 @@ struct CreateIssueSheet: View {
         let estimate = Int(estimateMinutes)
 
         Task {
-            let success = await appState.createIssue(
-                title: trimmedTitle,
-                teamId: teamId,
-                description: trimmedDescription.isEmpty ? nil : trimmedDescription,
-                priority: priority,
-                estimate: estimate
-            )
-
-            if success {
+            do {
+                let request = TaskCreateRequest(
+                    title: trimmedTitle,
+                    description: trimmedDescription.isEmpty ? nil : trimmedDescription,
+                    priority: priority,
+                    estimate: estimate,
+                    teamId: teamId
+                )
+                _ = try await taskManager.createTask(request, providerType: "Linear")
                 dismiss()
+            } catch {
+                appState.errorMessage = error.localizedDescription
             }
         }
     }
 
     private var showingError: Binding<Bool> {
         Binding(
-            get: { appState.errorMessage != nil && !appState.isCreatingIssue },
+            get: { appState.errorMessage != nil && !taskManager.isCreatingTask },
             set: { if !$0 { appState.errorMessage = nil } }
         )
     }

@@ -10,11 +10,19 @@ struct IssueListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let activeSession = appState.activeSession {
-                if activeSession.mode.isRest {
-                    RestTimerHeader(session: activeSession)
-                } else if let activeTicket = taskManager.tasks.first(where: { $0.id == activeSession.ticketId }) {
-                    ActiveTimerHeader(ticket: activeTicket, session: activeSession)
+            // 활성화된 태스크 헤더 표시
+            if let task = appState.activeTask {
+                switch task.type {
+                case .work(let ticketId):
+                    if let ticket = taskManager.tasks.first(where: { $0.id == ticketId }) {
+                        ActiveTimerHeader(ticket: ticket, task: task)
+                    }
+                case .rest:
+                    RestTimerHeader(task: task)
+                case .deciding:
+                    DecidingHeader()
+                case .transitioning:
+                    TransitioningHeader(task: task)
                 }
             }
 
@@ -33,7 +41,7 @@ struct IssueListView: View {
                 } label: {
                     Label("새 세션", systemImage: "plus.circle")
                 }
-                .disabled(appState.activeSession != nil)
+                .disabled(appState.currentSession != nil)
             }
             ToolbarItem(placement: .automatic) {
                 Button {
@@ -61,6 +69,16 @@ struct IssueListView: View {
             SessionStartSheet()
                 .environmentObject(appState)
         }
+        .sheet(isPresented: $appState.showingTaskSelection) {
+            TaskSelectionSheet()
+                .environmentObject(appState)
+                .environmentObject(taskManager)
+        }
+        .sheet(isPresented: $appState.showingTaskSwitch) {
+            TaskSwitchModal(isPresented: $appState.showingTaskSwitch)
+                .environmentObject(appState)
+                .environmentObject(taskManager)
+        }
         .sheet(isPresented: showingEstimateSheet) {
             if let ticketId = appState.pendingEstimateTicketId {
                 EstimateInputSheet(ticketId: ticketId, isPresented: showingEstimateSheet)
@@ -69,11 +87,19 @@ struct IssueListView: View {
         .sheet(isPresented: $appState.showCreateIssueSheet) {
             CreateIssueSheet()
                 .environmentObject(appState)
+                .environmentObject(taskManager)
         }
         .sheet(isPresented: $showingQuickCreate) {
             QuickCreateTaskSheet()
                 .environmentObject(taskManager)
                 .environmentObject(appState)
+        }
+        .sheet(isPresented: $appState.showingSessionReport) {
+            if let session = appState.completedSession {
+                SessionReportView(session: session, isPresented: $appState.showingSessionReport)
+                    .environmentObject(appState)
+                    .environmentObject(taskManager)
+            }
         }
         .alert(
             "작업 완료",
@@ -100,7 +126,9 @@ struct IssueListView: View {
 
     private func confirmStateChange(_ pending: PendingStateChange) {
         Task {
-            _ = await appState.updateIssueState(ticketId: pending.ticketId, stateId: pending.targetState.id)
+            if let ticket = taskManager.tasks.first(where: { $0.id == pending.ticketId }) {
+                try? await taskManager.updateTaskState(task: ticket, newState: pending.targetState.id)
+            }
             appState.pendingStateChangeConfirmation = nil
         }
     }
@@ -190,5 +218,84 @@ struct IssueListView: View {
             taskManager.configureLinear(accessToken: token, teamId: appState.selectedTeamId)
         }
         await taskManager.refreshAllTasks()
+    }
+}
+
+// MARK: - DecidingHeader
+
+private struct DecidingHeader: View {
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Image(systemName: "questionmark.circle.fill")
+                        .foregroundColor(.orange)
+                    Text("결정 중")
+                        .font(.headline)
+                }
+                Text("다음 할 일을 선택해주세요")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                TimerEngine.shared.endSession()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding()
+        .background(Color.orange.opacity(0.1))
+    }
+}
+
+// MARK: - TransitioningHeader
+
+private struct TransitioningHeader: View {
+    let task: SessionTask
+    @State private var elapsed: TimeInterval = 0
+
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .foregroundColor(.purple)
+                    Text("전환 중")
+                        .font(.headline)
+                }
+                Text("전환 시간: \(formatTime(elapsed))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                TimerEngine.shared.endSession()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding()
+        .background(Color.purple.opacity(0.1))
+        .onReceive(timer) { _ in
+            elapsed = task.actualDuration
+        }
+        .onAppear {
+            elapsed = task.actualDuration
+        }
+    }
+
+    private func formatTime(_ interval: TimeInterval) -> String {
+        let minutes = Int(interval) / 60
+        let seconds = Int(interval) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }

@@ -25,14 +25,18 @@ struct KeyboardNavigationModifier: ViewModifier {
             }
             .onKeyPress(.return) {
                 if focusManager.focusedTaskId != nil {
-                    onSelect()
+                    Task { @MainActor in
+                        onSelect()
+                    }
                     return .handled
                 }
                 return .ignored
             }
             .onKeyPress("l") {
                 if focusManager.focusedTaskId != nil {
-                    onSelect()
+                    Task { @MainActor in
+                        onSelect()
+                    }
                     return .handled
                 }
                 return .ignored

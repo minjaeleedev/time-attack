@@ -7,6 +7,8 @@ final class TaskManager: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
     @Published var providerSettings: ProviderSettings
+    @Published var isCreatingTask = false
+    @Published var isUpdatingTaskState = false
 
     private var linearProvider: LinearProvider?
     private let localProvider = LocalTaskProvider.shared
@@ -70,6 +72,9 @@ final class TaskManager: ObservableObject {
         _ request: TaskCreateRequest,
         providerType: String
     ) async throws -> Ticket {
+        isCreatingTask = true
+        defer { isCreatingTask = false }
+
         let ticket: Ticket
 
         if providerType == "Local" {
@@ -87,6 +92,9 @@ final class TaskManager: ObservableObject {
     }
 
     func updateTaskState(task: Ticket, newState: String) async throws {
+        isUpdatingTaskState = true
+        defer { isUpdatingTaskState = false }
+
         let updatedTicket: Ticket
 
         if task.isLocal {
