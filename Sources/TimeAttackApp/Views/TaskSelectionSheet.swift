@@ -117,6 +117,7 @@ struct TaskSelectionSheet: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
+                .keyboardShortcut("n", modifiers: .command)
             }
 
             if taskManager.tasks.isEmpty {
