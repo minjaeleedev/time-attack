@@ -10,8 +10,20 @@ struct CreateIssueSheet: View {
     @State private var description = ""
     @State private var selectedPriority: Int = 0
     @State private var estimateMinutes = ""
+    @State private var selectedProvider = "Local"
 
     @FocusState private var titleFocused: Bool
+
+    private var availableProviders: [String] {
+        var providers: [String] = []
+        if taskManager.providerSettings.localEnabled {
+            providers.append("Local")
+        }
+        if taskManager.providerSettings.linearEnabled && appState.isAuthenticated {
+            providers.append("Linear")
+        }
+        return providers
+    }
 
     private let priorities = [
         (value: 0, label: "우선순위 없음"),
@@ -32,11 +44,11 @@ struct CreateIssueSheet: View {
         .frame(width: 400, height: 480)
         .onAppear {
             titleFocused = true
-            Task {
-                await appState.loadTeams()
-                if let teamId = appState.selectedTeamId {
-                    await appState.loadWorkflowStates(for: teamId)
-                }
+            initializeDefaultProvider()
+        }
+        .onChange(of: selectedProvider) { _, newValue in
+            if newValue == "Linear" {
+                loadLinearTeamsIfNeeded()
             }
         }
         .alert("오류", isPresented: showingError) {
@@ -65,13 +77,31 @@ struct CreateIssueSheet: View {
     private var formContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                teamPicker
+                providerPicker
+                if selectedProvider == "Linear" {
+                    teamPicker
+                }
                 titleField
                 descriptionField
                 priorityPicker
                 estimateField
             }
             .padding()
+        }
+    }
+
+    private var providerPicker: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("생성 위치")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Picker("Provider", selection: $selectedProvider) {
+                ForEach(availableProviders, id: \.self) { provider in
+                    Text(provider).tag(provider)
+                }
+            }
+            .pickerStyle(.segmented)
         }
     }
 
@@ -208,19 +238,21 @@ struct CreateIssueSheet: View {
     }
 
     private var canCreate: Bool {
-        !title.trimmingCharacters(in: .whitespaces).isEmpty &&
-        appState.selectedTeamId != nil &&
-        !taskManager.isCreatingTask
+        let hasTitle = !title.trimmingCharacters(in: .whitespaces).isEmpty
+        let hasTeamIfNeeded = selectedProvider == "Local" || appState.selectedTeamId != nil
+        return hasTitle && hasTeamIfNeeded && !taskManager.isCreatingTask
     }
 
     private func createIssue() {
-        guard let teamId = appState.selectedTeamId,
-              !taskManager.isCreatingTask else { return }
+        guard !taskManager.isCreatingTask else { return }
 
         let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
         let trimmedDescription = description.trimmingCharacters(in: .whitespaces)
         let priority = selectedPriority > 0 ? selectedPriority : nil
-        let estimate = Int(estimateMinutes)
+
+        // Local tasks use estimate in minutes, Linear doesn't accept estimate (400 error)
+        let estimate = selectedProvider == "Local" ? Int(estimateMinutes) : nil
+        let teamId = selectedProvider == "Linear" ? appState.selectedTeamId : nil
 
         Task {
             do {
@@ -231,10 +263,29 @@ struct CreateIssueSheet: View {
                     estimate: estimate,
                     teamId: teamId
                 )
-                _ = try await taskManager.createTask(request, providerType: "Linear")
+                _ = try await taskManager.createTask(request, providerType: selectedProvider)
                 dismiss()
             } catch {
                 appState.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func initializeDefaultProvider() {
+        // Default to Local if available, otherwise Linear
+        if taskManager.providerSettings.localEnabled {
+            selectedProvider = "Local"
+        } else if taskManager.providerSettings.linearEnabled && appState.isAuthenticated {
+            selectedProvider = "Linear"
+            loadLinearTeamsIfNeeded()
+        }
+    }
+
+    private func loadLinearTeamsIfNeeded() {
+        Task {
+            await appState.loadTeams()
+            if let teamId = appState.selectedTeamId {
+                await appState.loadWorkflowStates(for: teamId)
             }
         }
     }
