@@ -8,6 +8,16 @@ struct IssueListView: View {
 
     @State private var showingQuickCreate = false
 
+    private var isAnySheetPresented: Bool {
+        appState.showingSessionStart
+            || appState.showingTaskSelection
+            || appState.showingTaskSwitch
+            || appState.pendingEstimateTicketId != nil
+            || appState.showCreateIssueSheet
+            || showingQuickCreate
+            || appState.showingSessionReport
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // 활성화된 태스크 헤더 표시
@@ -31,6 +41,7 @@ struct IssueListView: View {
         .focusable()
         .keyboardNavigation(
             focusManager: focusManager,
+            isEnabled: !isAnySheetPresented,
             onSelect: handleSelect,
             onQuickCreate: { showingQuickCreate = true }
         )
@@ -50,6 +61,17 @@ struct IssueListView: View {
                     Label("새 태스크", systemImage: "plus.square")
                 }
                 .keyboardShortcut("n", modifiers: .command)
+            }
+            if appState.currentSession != nil {
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        TimerEngine.shared.endSession()
+                    } label: {
+                        Label("세션 종료", systemImage: "stop.fill")
+                            .foregroundColor(.red)
+                    }
+                    .help("세션 종료 (⇧⌘S)")
+                }
             }
             ToolbarItem(placement: .primaryAction) {
                 Button(action: refreshTasks) {
@@ -239,13 +261,6 @@ private struct DecidingHeader: View {
             }
 
             Spacer()
-
-            Button {
-                TimerEngine.shared.endSession()
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(.borderless)
         }
         .padding()
         .background(Color.orange.opacity(0.1))
@@ -275,13 +290,6 @@ private struct TransitioningHeader: View {
             }
 
             Spacer()
-
-            Button {
-                TimerEngine.shared.endSession()
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(.borderless)
         }
         .padding()
         .background(Color.purple.opacity(0.1))

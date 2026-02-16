@@ -9,6 +9,7 @@ struct TaskSwitchModal: View {
     @State private var selectedOption: SwitchOption = .work
     @State private var restMinutes: String = "5"
     @State private var selectedTicketId: String?
+    @State private var showingCreateTask = false
 
     enum SwitchOption {
         case rest
@@ -47,6 +48,11 @@ struct TaskSwitchModal: View {
         }
         .padding()
         .frame(width: 320)
+        .sheet(isPresented: $showingCreateTask) {
+            CreateIssueSheet()
+                .environmentObject(appState)
+                .environmentObject(taskManager)
+        }
     }
 
     private var headerView: some View {
@@ -103,9 +109,21 @@ struct TaskSwitchModal: View {
 
     private var workSelectionView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("티켓 선택")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+            HStack {
+                Text("티켓 선택")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button {
+                    showingCreateTask = true
+                } label: {
+                    Label("새 티켓", systemImage: "plus.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+            }
 
             if taskManager.tasks.isEmpty {
                 Text("할당된 티켓이 없습니다")

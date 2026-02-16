@@ -43,7 +43,8 @@ final class TimerEngine: ObservableObject {
 
     func endSession() {
         guard let appState = appState,
-              var session = appState.currentSession else { return }
+            var session = appState.currentSession
+        else { return }
 
         endActiveTask()
 
@@ -66,7 +67,8 @@ final class TimerEngine: ObservableObject {
 
     func startTask(type: TaskType, initialRemainingTime: TimeInterval? = nil) {
         guard let appState = appState,
-              var session = appState.currentSession else { return }
+            var session = appState.currentSession
+        else { return }
 
         endActiveTask()
 
@@ -96,8 +98,9 @@ final class TimerEngine: ObservableObject {
 
     func endActiveTask() {
         guard let appState = appState,
-              var session = appState.currentSession,
-              var task = session.activeTask else { return }
+            var session = appState.currentSession,
+            var task = session.activeTask
+        else { return }
 
         if task.isPaused, !task.pausedIntervals.isEmpty {
             var intervals = task.pausedIntervals
@@ -120,7 +123,8 @@ final class TimerEngine: ObservableObject {
 
     func startTransitionTask(fromTicketId: String?) {
         guard let appState = appState,
-              appState.currentSession != nil else { return }
+            appState.currentSession != nil
+        else { return }
 
         startTask(type: .transitioning(fromTicketId: fromTicketId))
         appState.showingTaskSwitch = true
@@ -169,12 +173,48 @@ final class TimerEngine: ObservableObject {
         startWorkTask(ticketId: ticketId)
     }
 
+    // MARK: - Convenience (Suspend + Transition)
+
+    func suspendAndTransition() {
+        guard let appState = appState,
+            let task = appState.activeTask
+        else { return }
+
+        if let ticketId = task.type.ticketId {
+            let elapsed = Date().timeIntervalSince(task.startTime) - task.totalPausedTime
+            let ticket = taskManager?.tasks.first(where: { $0.id == ticketId })
+            let estimate = ticket?.localEstimate ?? 0
+            let remaining = max(0, (task.initialRemainingTime ?? estimate) - elapsed)
+            suspendCurrentTask(remainingTime: remaining)
+            startTransitionTask(fromTicketId: ticketId)
+        } else if task.type.isRest {
+            startTransitionTask(fromTicketId: nil)
+        }
+    }
+
+    func suspendAndSwitchTo(ticketId: String) {
+        guard let appState = appState,
+            let task = appState.activeTask
+        else { return }
+
+        if let currentTicketId = task.type.ticketId {
+            let elapsed = Date().timeIntervalSince(task.startTime) - task.totalPausedTime
+            let ticket = taskManager?.tasks.first(where: { $0.id == currentTicketId })
+            let estimate = ticket?.localEstimate ?? 0
+            let remaining = max(0, (task.initialRemainingTime ?? estimate) - elapsed)
+            suspendCurrentTask(remainingTime: remaining)
+        }
+
+        startWorkTask(ticketId: ticketId)
+    }
+
     // MARK: - Suspend/Resume
 
     func suspendCurrentTask(remainingTime: TimeInterval) {
         guard let appState = appState,
-              let task = appState.activeTask,
-              let ticketId = task.type.ticketId else { return }
+            let task = appState.activeTask,
+            let ticketId = task.type.ticketId
+        else { return }
 
         let suspended = SuspendedSession(
             ticketId: ticketId,
@@ -189,8 +229,9 @@ final class TimerEngine: ObservableObject {
 
     func togglePause() {
         guard let appState = appState,
-              var session = appState.currentSession,
-              var task = session.activeTask else { return }
+            var session = appState.currentSession,
+            var task = session.activeTask
+        else { return }
 
         var intervals = task.pausedIntervals
         if task.isPaused, !intervals.isEmpty {
@@ -249,7 +290,8 @@ final class TimerEngine: ObservableObject {
     // MARK: - Notifications
 
     private func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in
+        }
     }
 
     private func scheduleRestEndNotification(duration: TimeInterval) {
@@ -259,20 +301,24 @@ final class TimerEngine: ObservableObject {
         content.sound = .default
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: duration, repeats: false)
-        let request = UNNotificationRequest(identifier: "rest-end", content: content, trigger: trigger)
+        let request = UNNotificationRequest(
+            identifier: "rest-end", content: content, trigger: trigger)
 
         UNUserNotificationCenter.current().add(request)
     }
 
     private func cancelPendingNotifications() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-end"])
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [
+            "rest-end"
+        ])
     }
 
     // MARK: - Auto State Transition
 
     private func autoTransitionToInProgress(ticketId: String) {
         guard let appState = appState,
-              let taskManager = taskManager else { return }
+            let taskManager = taskManager
+        else { return }
 
         guard let ticket = taskManager.tasks.first(where: { $0.id == ticketId }) else { return }
 
@@ -292,10 +338,12 @@ final class TimerEngine: ObservableObject {
 
     func promptCompletionStateChange(ticketId: String) {
         guard let appState = appState,
-              let taskManager = taskManager else { return }
+            let taskManager = taskManager
+        else { return }
 
         guard let ticket = taskManager.tasks.first(where: { $0.id == ticketId }),
-              let completedState = appState.findCompletedState() else { return }
+            let completedState = appState.findCompletedState()
+        else { return }
 
         appState.pendingStateChangeConfirmation = PendingStateChange(
             ticketId: ticketId,

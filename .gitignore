@@ -30,3 +30,6 @@ Package.resolved
 *.moved-aside
 
 *.xcodeproj/
+
+# cluade
+.serena

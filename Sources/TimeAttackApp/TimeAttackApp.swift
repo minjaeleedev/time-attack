@@ -26,6 +26,20 @@ struct TimeAttackApp: App {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(appState.currentSession != nil)
             }
+            CommandGroup(after: .newItem) {
+                Divider()
+                Button("전환") {
+                    TimerEngine.shared.suspendAndTransition()
+                }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+                .disabled(!(appState.activeTask?.type.isWork == true || appState.activeTask?.type.isRest == true))
+
+                Button("세션 종료") {
+                    TimerEngine.shared.endSession()
+                }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+                .disabled(appState.currentSession == nil)
+            }
         }
 
         MenuBarExtra {
