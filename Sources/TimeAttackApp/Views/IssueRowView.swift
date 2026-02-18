@@ -18,7 +18,7 @@ struct IssueRowView: View {
             ticketInfo
             Spacer()
             estimateSection
-            timerButton
+            actionButton
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
@@ -69,12 +69,25 @@ struct IssueRowView: View {
         }
     }
 
-    private var timerButton: some View {
-        Button(action: toggleTimer) {
-            Image(systemName: isActiveTicket ? "stop.fill" : "play.fill")
+    @ViewBuilder
+    private var actionButton: some View {
+        if isActiveTicket {
+            EmptyView()
+        } else if appState.activeWorkTicketId != nil {
+            Button(action: transitionToThis) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+            }
+            .buttonStyle(.borderless)
+            .help("이 태스크로 전환 (⇧⌘T)")
+            .disabled(ticket.localEstimate == nil)
+        } else {
+            Button(action: startThis) {
+                Image(systemName: "play.fill")
+            }
+            .buttonStyle(.borderless)
+            .help("작업 시작")
+            .disabled(ticket.localEstimate == nil)
         }
-        .buttonStyle(.borderless)
-        .disabled(ticket.localEstimate == nil)
     }
 
     private var isActiveTicket: Bool {
@@ -99,15 +112,19 @@ struct IssueRowView: View {
         taskManager.updateLocalEstimate(taskId: ticket.id, estimate: seconds)
     }
 
-    private func toggleTimer() {
-        if isActiveTicket {
-            TimerEngine.shared.endSession()
+    private func startThis() {
+        if ticket.localEstimate == nil {
+            appState.pendingEstimateTicketId = ticket.id
         } else {
-            if ticket.localEstimate == nil {
-                appState.pendingEstimateTicketId = ticket.id
-            } else {
-                TimerEngine.shared.startWorkTask(ticketId: ticket.id)
-            }
+            TimerEngine.shared.startWorkTask(ticketId: ticket.id)
+        }
+    }
+
+    private func transitionToThis() {
+        if ticket.localEstimate == nil {
+            appState.pendingEstimateTicketId = ticket.id
+        } else {
+            TimerEngine.shared.suspendAndSwitchTo(ticketId: ticket.id)
         }
     }
 }

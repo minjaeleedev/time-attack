@@ -47,22 +47,14 @@ struct RestTimerHeader: View {
                 .font(.system(.title, design: .monospaced))
                 .foregroundColor(isComplete ? .orange : .primary)
 
-            HStack(spacing: 8) {
-                Button {
-                    TimerEngine.shared.startTransitionTask(fromTicketId: nil)
-                } label: {
-                    Text("작업 시작")
-                        .font(.caption)
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button {
-                    TimerEngine.shared.endSession()
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(.borderless)
+            Button {
+                TimerEngine.shared.startTransitionTask(fromTicketId: nil)
+            } label: {
+                Text("작업 시작")
+                    .font(.caption)
             }
+            .buttonStyle(.borderedProminent)
+            .help("작업 전환 (⇧⌘T)")
         }
         .padding()
         .background(Color.green.opacity(0.1))

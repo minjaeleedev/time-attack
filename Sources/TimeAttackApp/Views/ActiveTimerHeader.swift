@@ -62,22 +62,14 @@ struct ActiveTimerHeader: View {
     }
 
     private var controlButtons: some View {
-        HStack(spacing: 8) {
-            // 전환 버튼 - transitioning 태스크 시작
-            Button(action: {
-                TimerEngine.shared.suspendCurrentTask(remainingTime: remaining > 0 ? remaining : 0)
-                TimerEngine.shared.startTransitionTask(fromTicketId: task.type.ticketId)
-            }) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-            }
-            .buttonStyle(.borderless)
-
-            // 정지 버튼
-            Button(action: { TimerEngine.shared.endSession() }) {
-                Image(systemName: "stop.fill")
-            }
-            .buttonStyle(.borderless)
+        // 전환 버튼 - transitioning 태스크 시작
+        Button(action: {
+            TimerEngine.shared.suspendAndTransition()
+        }) {
+            Image(systemName: "arrow.triangle.2.circlepath")
         }
+        .buttonStyle(.borderless)
+        .help("전환 (⇧⌘T)")
     }
 
     // MARK: - Computed Properties
